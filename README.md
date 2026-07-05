@@ -4,7 +4,11 @@
 
 _A read-only Markdown viewer for Windows, crafted with Kami's warm document aesthetic._
 
-![Screenshot](./assets/screenshot.png)
+<p align="center">
+  <img src="./assets/screenshots/screenshot-1.png" width="32%" alt="Kami Markdown Viewer screenshot 1" />
+  <img src="./assets/screenshots/screenshot-2.png" width="32%" alt="Kami Markdown Viewer screenshot 2" />
+  <img src="./assets/screenshots/screenshot-3.png" width="32%" alt="Kami Markdown Viewer screenshot 3" />
+</p>
 
 </div>
 
