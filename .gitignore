@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+
+# Tauri Rust target
+target/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.sw?
+
+# Local env
+.env
+.env.local
+
+# Test coverage
+coverage/
+
+# Windows reserved-name artifacts that break Git on Windows
+nul
