@@ -2,6 +2,10 @@
 
 A read-only Windows Markdown viewer inspired by Kami's warm parchment document system.
 
+![Screenshot](./assets/screenshot.png)
+
+The visual style — warm parchment background, serif typography, and restrained accent color — draws directly from Kami's document design language.
+
 ## Development
 
 ```bash
