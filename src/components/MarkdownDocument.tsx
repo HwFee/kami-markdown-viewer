@@ -5,12 +5,15 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema, type Options as RehypeSanitizeOptions } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { isValidElement } from "react";
+import { isValidElement, useCallback, useRef } from "react";
 import { MarkdownImage } from "./MarkdownImage";
+import { slugify } from "../lib/outline";
+import type { OutlineHeading } from "../types";
 
 type MarkdownDocumentProps = {
   markdown: string;
   documentPath: string;
+  headings?: OutlineHeading[];
 };
 
 const kamiSchema: RehypeSanitizeOptions = {
@@ -68,13 +71,46 @@ const kamiSchema: RehypeSanitizeOptions = {
   },
 };
 
-export function MarkdownDocument({ markdown, documentPath }: MarkdownDocumentProps) {
+function useHeadingIdResolver(headings?: OutlineHeading[]) {
+  const usedIds = useRef(new Set<string>());
+
+  return useCallback(
+    (level: 1 | 2 | 3, text: string) => {
+      const candidates = headings?.filter((h) => h.level === level && h.text === text) ?? [];
+      for (const candidate of candidates) {
+        if (!usedIds.current.has(candidate.id)) {
+          usedIds.current.add(candidate.id);
+          return candidate.id;
+        }
+      }
+      return slugify(text) || "heading";
+    },
+    [headings]
+  );
+}
+
+function extractText(node: unknown): string {
+  if (typeof node === "string") return node;
+  if (Array.isArray(node)) return node.map(extractText).join("");
+  if (node && typeof node === "object" && "props" in node) {
+    const props = (node as { props?: { children?: unknown } }).props;
+    return extractText(props?.children);
+  }
+  return "";
+}
+
+export function MarkdownDocument({ markdown, documentPath, headings }: MarkdownDocumentProps) {
+  const resolveHeadingId = useHeadingIdResolver(headings);
+
   return (
     <article className="markdown-body">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, [rehypeSanitize, kamiSchema]]}
         components={{
+          h1: ({ children }) => <h1 id={resolveHeadingId(1, extractText(children))}>{children}</h1>,
+          h2: ({ children }) => <h2 id={resolveHeadingId(2, extractText(children))}>{children}</h2>,
+          h3: ({ children }) => <h3 id={resolveHeadingId(3, extractText(children))}>{children}</h3>,
           a: ({ href, children }) => {
             const isExternal = href?.startsWith("http://") || href?.startsWith("https://");
 
