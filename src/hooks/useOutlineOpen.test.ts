@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
+import { Store } from "@tauri-apps/plugin-store";
 import { useOutlineOpen } from "./useOutlineOpen";
 
 const mockGet = vi.fn();
@@ -51,6 +52,39 @@ describe("useOutlineOpen", () => {
 
   it("loads stored value on mount", async () => {
     mockGet.mockResolvedValue(true);
+    const { result } = renderHook(() => useOutlineOpen(false));
+    await waitFor(() => expect(result.current[0]).toBe(true));
+  });
+
+  it("persists toggle to the store", async () => {
+    mockGet.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useOutlineOpen(false));
+    await waitFor(() => expect(result.current[0]).toBe(false));
+
+    act(() => {
+      result.current[1]();
+    });
+
+    await waitFor(() => expect(mockSet).toHaveBeenCalledWith("outlineOpen", true));
+    expect(mockSave).toHaveBeenCalled();
+  });
+
+  it("persists explicit set to the store", async () => {
+    mockGet.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useOutlineOpen(false));
+    await waitFor(() => expect(result.current[0]).toBe(false));
+
+    act(() => {
+      result.current[2](true);
+    });
+
+    await waitFor(() => expect(mockSet).toHaveBeenCalledWith("outlineOpen", true));
+    expect(mockSave).toHaveBeenCalled();
+  });
+
+  it("falls back to localStorage when Store.load throws on load", async () => {
+    vi.mocked(Store.load).mockRejectedValueOnce(new Error("store unavailable"));
+    localStorage.setItem("outlineOpen", "true");
     const { result } = renderHook(() => useOutlineOpen(false));
     await waitFor(() => expect(result.current[0]).toBe(true));
   });

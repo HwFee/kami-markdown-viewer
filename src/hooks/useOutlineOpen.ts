@@ -35,7 +35,7 @@ export function useOutlineOpen(initialOpen: boolean = false): [boolean, () => vo
     return () => {
       cancelled = true;
     };
-  }, [initialOpen]);
+  }, []);
 
   useEffect(() => {
     if (isInitialMount.current) {
