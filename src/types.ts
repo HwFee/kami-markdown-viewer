@@ -5,6 +5,12 @@ export type LoadedDocument = {
   markdown: string;
 };
 
+export type OutlineHeading = {
+  id: string;
+  level: 1 | 2 | 3;
+  text: string;
+};
+
 export type DocumentState =
   | { status: "empty" }
   | { status: "loading" }
