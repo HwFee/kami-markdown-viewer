@@ -34,7 +34,7 @@ export function useOutlineSync(
       setActiveHeadingId(bestId);
     };
 
-    if ("IntersectionObserver" in window) {
+    if (typeof window.IntersectionObserver !== "undefined") {
       const observer = new IntersectionObserver(
         () => {
           updateActive();
