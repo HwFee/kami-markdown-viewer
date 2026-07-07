@@ -157,7 +157,7 @@ describe("useOutlineSync", () => {
 
     titleTop = 50;
     act(() => {
-      container.dispatchEvent(new Event("scroll"));
+      observers[0].callback([], observers[0] as unknown as IntersectionObserver);
     });
 
     expect(result.current).toBe("title");
@@ -165,7 +165,7 @@ describe("useOutlineSync", () => {
     titleTop = -100;
     sectionTop = 50;
     act(() => {
-      container.dispatchEvent(new Event("scroll"));
+      observers[0].callback([], observers[0] as unknown as IntersectionObserver);
     });
 
     expect(result.current).toBe("section");

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { OutlineHeading } from "../types";
 
 export function useOutlineSync(
@@ -6,6 +6,7 @@ export function useOutlineSync(
   headings: OutlineHeading[]
 ): string | undefined {
   const [activeHeadingId, setActiveHeadingId] = useState<string | undefined>(undefined);
+  const headingIdsKey = useMemo(() => headings.map((h) => h.id).join(","), [headings]);
 
   useEffect(() => {
     if (!contentRef.current || headings.length === 0) return;
@@ -50,15 +51,9 @@ export function useOutlineSync(
         if (element) observer.observe(element);
       }
 
-      const handleScroll = () => {
-        updateActive();
-      };
-
-      container.addEventListener("scroll", handleScroll, { passive: true });
       updateActive();
 
       return () => {
-        container.removeEventListener("scroll", handleScroll);
         observer.disconnect();
       };
     }
@@ -70,7 +65,7 @@ export function useOutlineSync(
     return () => {
       container.removeEventListener("scroll", handleScroll);
     };
-  }, [contentRef, headings]);
+  }, [contentRef, headingIdsKey]);
 
   return activeHeadingId;
 }
