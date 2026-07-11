@@ -249,6 +249,7 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
           PreTag="pre"
           customStyle={{
             margin: 0,
+            padding: "14px 19px",
             borderRadius: "6px",
             background: "transparent",
             fontSize: "inherit",
@@ -339,7 +340,7 @@ Append to `src/styles/kami.css`:
 
 .code-block pre {
   margin: 0;
-  padding: 14px 19px;
+  padding: 0;
   border-radius: 0;
   background: transparent;
   overflow-x: auto;
@@ -909,8 +910,9 @@ If no source changes were needed to pass verification, skip the commit. If any t
 - Because the source `<pre>` is replaced, there is only one `<pre>` in the final output (the one from SyntaxHighlighter), and no nested `<pre>`.
 - Divs are never placed inside a `<pre>` element.
 
-**3. Scoped CSS resets:**
-- `.code-block pre` resets `.markdown-body pre` (margin, padding `14px 19px`, background, overflow) and carries the block geometry/padding exactly once.
+**3. Scoped CSS resets and padding ownership:**
+- Padding is applied exactly once via `SyntaxHighlighter` `customStyle` (`padding: "14px 19px"`) to override oneLight's inline padding.
+- `.code-block pre` resets `.markdown-body pre` (margin, padding, background, overflow) without owning padding.
 - `.code-block pre code` resets `.markdown-body pre code` and `.markdown-body code` (padding, background, color, radius).
 - `.code-block .code-block__copy` overrides `.markdown-body button` (min-height 0, height 28px, margin-left auto, no box-shadow, no transform on active).
 - CSS contract tests assert these structural/reset selectors and the required declarations (`min-height`, `transform: none`, `margin-left: auto`).
