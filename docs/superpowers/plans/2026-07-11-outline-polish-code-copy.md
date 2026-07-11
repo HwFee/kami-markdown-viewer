@@ -98,9 +98,9 @@ describe("CodeBlock", () => {
     const { container } = render(<CodeBlock code="const x = 1;" language="ts" />);
     const pres = container.querySelectorAll(".code-block pre");
     expect(pres).toHaveLength(1);
-    const code = pres[0].querySelector("code");
+    const code = pres[0].querySelector(":scope > code");
     expect(code).toBeInTheDocument();
-    expect(pres[0]).toHaveClass("language-ts");
+    expect(code).toHaveClass("language-ts");
   });
 
   it("copies the exact raw code string on click", async () => {
