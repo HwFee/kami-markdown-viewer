@@ -17,7 +17,7 @@
 - Block code only; inline `<code>` stays unchanged.
 - `navigator.clipboard.writeText` is the copy mechanism.
 - Status feedback copy is Chinese: “已复制” / “复制失败”.
-- Reduced motion must disable transitions for the outline panel, document shift, and code-copy hover fade.
+- Reduced motion must disable transitions for the outline panel, document shift, code-copy hover fade, and outline-scrim animation.
 - Touch / no-hover devices keep the copy button visible.
 - Commit after every independently-testable task, staging only the intended files.
 
@@ -27,16 +27,16 @@
 
 | File | Responsibility |
 |------|----------------|
-| `src/components/CodeBlock.tsx` | New wrapper: Prism syntax highlighter, language label, copy button, status state, timer cleanup, aria-live region. |
-| `src/components/CodeBlock.test.tsx` | Unit tests for copy success/failure, timer cleanup, language label, accessibility. |
-| `src/components/MarkdownDocument.tsx` | Detect block code via `components.pre`; route block code to `CodeBlock` and inline code to `<code>`. |
-| `src/components/MarkdownDocument.test.tsx` | Tests for fenced language, fenced no-language, and inline code behavior. |
+| `src/components/CodeBlock.tsx` | New wrapper: semantic `<pre className="code-block">`, Prism syntax highlighter with `PreTag="div"`, language label, copy button, status state, timer cleanup, aria-live region. |
+| `src/components/CodeBlock.test.tsx` | Unit tests for semantic structure, Prism class, copy success/failure, timer cleanup, language label, accessibility. |
+| `src/components/MarkdownDocument.tsx` | Detect block code via `components.pre`; route block code to `CodeBlock` and inline code to `<code>`. Copy controls apply to any rendered `<pre><code>` block, including sanitized raw HTML. |
+| `src/components/MarkdownDocument.test.tsx` | Baseline inline-code test (already passes); failing tests for fenced language and fenced no-language block copy. |
 | `src/components/OutlinePanel.tsx` | Update indentation multiplier from 16px to 12px per level (h1→h3: 0, 12, 24). |
 | `src/components/OutlinePanel.test.tsx` | Add indentation contract test. |
 | `src/App.tsx` | No public prop changes; existing CSS-class toggle stays. Regression tests only. |
-| `src/App.test.tsx` | Add layout-shift and overlay regression tests. |
-| `src/styles/kami.css` | Floating outline panel styles, document shift/gutter, reduced motion, code-block copy styles. |
-| `src/styles/kami.css.test.ts` | CSS contract tests for layout, outline panel, code-copy visibility, reduced motion. |
+| `src/App.test.tsx` | No new tests needed; existing image DOM-identity test already covers document stability. |
+| `src/styles/kami.css` | Floating outline panel styles, document shift/gutter, reduced motion; scoped code-block copy styles with explicit resets against `.markdown-body` rules. |
+| `src/styles/kami.css.test.ts` | Code-copy CSS contract tests (Task 1) and outline CSS contract tests (Task 3). |
 
 ---
 
@@ -45,29 +45,39 @@
 **Files:**
 - Create: `src/components/CodeBlock.tsx`
 - Create: `src/components/CodeBlock.test.tsx`
-- Modify: `src/styles/kami.css` (append `.code-block` rules)
+- Modify: `src/styles/kami.css` (append code-copy slice)
+- Modify: `src/styles/kami.css.test.ts` (append code-copy CSS contract tests)
 
 **Interfaces:**
 - Consumes: `code: string`, `language?: string`
 - Produces: `CodeBlock` component exported from `src/components/CodeBlock.tsx`
+- Rendered structure: `<pre className="code-block">` containing a header row, a `.code-block__body` div, and a visually hidden `aria-live` status. `SyntaxHighlighter` renders with `PreTag="div"` inside the body, so no nested `<pre>` is produced.
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Write the failing component tests**
 
 ```tsx
 // src/components/CodeBlock.test.tsx
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { CodeBlock } from "./CodeBlock";
 
 describe("CodeBlock", () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    vi.useFakeTimers({ shouldAdvanceTime: false });
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
-    vi.restoreAllMocks();
+  });
+
+  it("renders a semantic pre root with no nested pre", () => {
+    const { container } = render(<CodeBlock code="const x = 1;" />);
+    const pres = container.querySelectorAll("pre");
+    expect(pres).toHaveLength(1);
+    expect(pres[0]).toHaveClass("code-block");
+    expect(pres[0]).toHaveTextContent("const x = 1;");
   });
 
   it("renders the code with a copy button and optional language label", () => {
@@ -83,39 +93,58 @@ describe("CodeBlock", () => {
     expect(screen.queryByText("plain")).not.toBeInTheDocument();
   });
 
+  it("preserves the Prism class on the syntax-highlighter output", () => {
+    const { container } = render(<CodeBlock code="const x = 1;" language="ts" />);
+    const highlighter = container.querySelector(".code-block__body > div");
+    expect(highlighter).toHaveClass("prism-code");
+  });
+
   it("copies the exact raw code string on click", async () => {
     const writeText = vi.fn().mockResolvedValueOnce(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
     render(<CodeBlock code="  indented\n  code" language="ts" />);
-    fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith("  indented\n  code"));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
+    });
+    expect(writeText).toHaveBeenCalledWith("  indented\n  code");
   });
 
   it("shows copied feedback for 1.5s then returns to idle", async () => {
-    const writeText = vi.fn().mockResolvedValueOnce(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
+    vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn().mockResolvedValueOnce(undefined) } });
     render(<CodeBlock code="x" />);
-    fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
+    });
     expect(screen.getByRole("status")).toHaveTextContent("已复制");
-    vi.advanceTimersByTime(1500);
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(""));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("");
   });
 
   it("shows error feedback when clipboard fails", async () => {
-    const writeText = vi.fn().mockRejectedValueOnce(new Error("denied"));
-    Object.assign(navigator, { clipboard: { writeText } });
+    vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn().mockRejectedValueOnce(new Error("denied")) } });
     render(<CodeBlock code="x" />);
-    fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("复制失败"));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("复制失败");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("");
   });
 
-  it("clears any running timer when unmounted", () => {
-    const writeText = vi.fn().mockResolvedValueOnce(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
+  it("clears the running timer when unmounted", async () => {
+    vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn().mockResolvedValueOnce(undefined) } });
     const { unmount } = render(<CodeBlock code="x" />);
-    fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
-    expect(() => unmount()).not.toThrow();
-    expect(() => vi.advanceTimersByTime(2000)).not.toThrow();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("已复制");
+    expect(vi.getTimerCount()).toBe(1);
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 ```
@@ -176,7 +205,7 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
   const visibleLabel = isCopied ? "已复制" : isError ? "复制失败" : "复制代码";
 
   return (
-    <div className="code-block">
+    <pre className="code-block">
       <div className="code-block__header">
         {language ? <span className="code-block__lang">{language}</span> : null}
         <button
@@ -228,20 +257,70 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
       <span className="code-block__status" aria-live="polite" aria-atomic="true">
         {isCopied ? "已复制" : isError ? "复制失败" : ""}
       </span>
-    </div>
+    </pre>
   );
 }
 ```
 
-- [ ] **Step 3: Append the code-block CSS**
+- [ ] **Step 3: Run the component tests**
+
+Run: `npm test -- --run src/components/CodeBlock.test.tsx`
+Expected: PASS for all CodeBlock tests.
+
+- [ ] **Step 4: Write the failing CSS contract tests for code copy**
+
+Append to `src/styles/kami.css.test.ts`:
+
+```tsx
+describe("kami.css code-block specificity and resets", () => {
+  it("scopes code-block rules to pre.code-block to override markdown-body defaults", () => {
+    expect(css).toMatch(/pre\.code-block\s*\{/s);
+    expect(css).toMatch(/pre\.code-block\s+code\s*\{/s);
+    expect(css).toMatch(/pre\.code-block\s+\.code-block__copy\s*\{/s);
+    expect(css).toMatch(/pre\.code-block\s+\.code-block__body\s*\u003e\s*div\s*\{/s);
+  });
+
+  it("pushes the copy button to the top-right when no language label is present", () => {
+    const rule = css.match(/pre\.code-block\s+\.code-block__copy\s*\{[^}]*\}/s)?.[0] ?? "";
+    expect(rule).toMatch(/margin-left:\s*auto/);
+  });
+});
+
+describe("kami.css code copy visibility", () => {
+  it("hides the copy button by default and reveals it on hover or focus-within", () => {
+    const rule = css.match(/pre\.code-block\s+\.code-block__copy\s*\{[^}]*\}/s)?.[0] ?? "";
+    expect(rule).toMatch(/opacity:\s*0/);
+    const hoverRule = css.match(/pre\.code-block:hover\s+\.code-block__copy,\s*pre\.code-block:focus-within\s+\.code-block__copy\s*\{[^}]*\}/s)?.[0] ?? "";
+    expect(hoverRule).toMatch(/opacity:\s*1/);
+  });
+
+  it("keeps the copy button visible on touch/no-hover devices", () => {
+    const rule = css.match(/@media\s*\(hover:\s*none\)\s*\{[^}]*pre\.code-block\s+\.code-block__copy\s*\{[^}]*opacity:\s*1/s)?.[0] ?? "";
+    expect(rule).toBeTruthy();
+  });
+});
+
+describe("kami.css code copy reduced motion", () => {
+  it("disables code copy transitions under reduced motion", () => {
+    const rule = css.match(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[^}]*pre\.code-block\s+\.code-block__copy[^}]*transition:\s*none/s)?.[0] ?? "";
+    expect(rule).toBeTruthy();
+  });
+});
+```
+
+Run: `npm test -- --run src/styles/kami.css.test.ts`
+Expected: The new code-copy CSS contract tests FAIL; existing scroll-ownership tests PASS.
+
+- [ ] **Step 5: Append the code-block CSS with scoped resets**
 
 Append to `src/styles/kami.css`:
 
 ```css
-.code-block {
+pre.code-block {
   display: flex;
   flex-direction: column;
   margin: 14px 0;
+  padding: 0;
   border-radius: 6px;
   background: var(--ivory);
   overflow: hidden;
@@ -251,7 +330,17 @@ Append to `src/styles/kami.css`:
   line-height: 1.5;
 }
 
-.code-block__header {
+pre.code-block > code,
+pre.code-block code {
+  padding: 0;
+  border-radius: 0;
+  background: transparent !important;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+pre.code-block .code-block__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -259,7 +348,7 @@ Append to `src/styles/kami.css`:
   padding: 8px 12px;
 }
 
-.code-block__lang {
+pre.code-block .code-block__lang {
   color: var(--stone);
   font-family: var(--mono);
   font-size: 11px;
@@ -267,7 +356,7 @@ Append to `src/styles/kami.css`:
   letter-spacing: 0.3px;
 }
 
-.code-block__copy {
+pre.code-block .code-block__copy {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -275,38 +364,44 @@ Append to `src/styles/kami.css`:
   min-width: 28px;
   height: 28px;
   padding: 0 7px;
+  margin: 0;
+  margin-left: auto;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--stone);
   cursor: pointer;
+  font-family: var(--serif);
+  font-size: 12px;
+  font-weight: 400;
+  box-shadow: none;
   transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
   opacity: 0;
 }
 
-.code-block__copy:hover {
+pre.code-block .code-block__copy:hover {
   background-color: rgba(27, 54, 93, 0.08);
   color: var(--brand);
 }
 
-.code-block__copy:focus-visible {
+pre.code-block .code-block__copy:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: -2px;
   opacity: 1;
 }
 
-.code-block:hover .code-block__copy,
-.code-block:focus-within .code-block__copy {
+pre.code-block:hover .code-block__copy,
+pre.code-block:focus-within .code-block__copy {
   opacity: 1;
 }
 
 @media (hover: none) {
-  .code-block__copy {
+  pre.code-block .code-block__copy {
     opacity: 1;
   }
 }
 
-.code-block__copy-icon {
+pre.code-block .code-block__copy-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -314,27 +409,27 @@ Append to `src/styles/kami.css`:
   height: 14px;
 }
 
-.code-block__copy-icon svg {
+pre.code-block .code-block__copy-icon svg {
   width: 100%;
   height: 100%;
 }
 
-.code-block__copy-label {
+pre.code-block .code-block__copy-label {
   font-family: var(--serif);
   font-size: 12px;
 }
 
-.code-block__body {
+pre.code-block .code-block__body {
   min-width: 0;
   overflow-x: auto;
 }
 
-.code-block__body > div {
+pre.code-block .code-block__body > div {
   padding: 14px 19px !important;
   background: transparent !important;
 }
 
-.code-block__status {
+pre.code-block .code-block__status {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -345,18 +440,24 @@ Append to `src/styles/kami.css`:
   white-space: nowrap;
   border: 0;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  pre.code-block .code-block__copy {
+    transition: none;
+  }
+}
 ```
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 6: Run all Task 1 tests**
 
-Run: `npm test -- --run src/components/CodeBlock.test.tsx`
-Expected: PASS.
+Run: `npm test -- --run src/components/CodeBlock.test.tsx src/styles/kami.css.test.ts`
+Expected: PASS for all tests.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/components/CodeBlock.tsx src/components/CodeBlock.test.tsx src/styles/kami.css
-git commit -m "feat: add copyable CodeBlock component"
+git add src/components/CodeBlock.tsx src/components/CodeBlock.test.tsx src/styles/kami.css src/styles/kami.css.test.ts
+git commit -m "feat: add copyable CodeBlock component and scoped CSS"
 ```
 
 ---
@@ -365,54 +466,70 @@ git commit -m "feat: add copyable CodeBlock component"
 
 **Files:**
 - Modify: `src/components/MarkdownDocument.tsx` (components `pre` and `code`)
-- Modify: `src/components/MarkdownDocument.test.tsx` (new tests)
+- Modify: `src/components/MarkdownDocument.test.tsx` (baseline + new failing tests)
 
 **Interfaces:**
 - Consumes: `CodeBlock` from `src/components/CodeBlock.tsx`
-- Produces: Block code renders `CodeBlock`; inline code renders unchanged `<code>`.
+- Produces: Any rendered `<pre><code>` block (fenced language, fenced no-language, or sanitized raw HTML) renders `CodeBlock`; inline `<code>` renders unchanged.
 
-- [ ] **Step 1: Write the failing tests for block vs inline detection**
+- [ ] **Step 1: Write the baseline inline-code regression test**
 
-Append to `src/components/MarkdownDocument.test.tsx` (inside the existing `describe("MarkdownDocument")`):
+Add this test inside the existing `describe("MarkdownDocument")` in `src/components/MarkdownDocument.test.tsx`:
 
 ```tsx
-  it("renders a copyable code block for fenced code with language", async () => {
-    const writeText = vi.fn().mockResolvedValueOnce(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    render(<MarkdownDocument markdown="```ts\nconst x = 1;\n```" documentPath="/docs/sample.md" />);
-    expect(screen.getByText("ts")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith("const x = 1;"));
-  });
-
-  it("renders a copyable code block for fenced code without language", async () => {
-    const writeText = vi.fn().mockResolvedValueOnce(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    render(<MarkdownDocument markdown="```\nplain block\n```" documentPath="/docs/sample.md" />);
-    expect(screen.getByRole("button", { name: "复制代码" })).toBeInTheDocument();
-    expect(screen.queryByText("plain")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith("plain block"));
-  });
-
-  it("does not render a copy button for inline code", () => {
+  it("renders inline code without a copy button", () => {
     render(<MarkdownDocument markdown="Use `inlineCode` here." documentPath="/docs/sample.md" />);
     expect(screen.getByRole("code")).toHaveTextContent("inlineCode");
     expect(screen.queryByRole("button", { name: "复制代码" })).not.toBeInTheDocument();
   });
 ```
 
+This test should already pass with the current implementation because the existing `code` component returns inline `<code>` without a copy button.
+
+Run: `npm test -- --run src/components/MarkdownDocument.test.tsx -t "renders inline code without a copy button"`
+Expected: PASS.
+
+- [ ] **Step 2: Write the failing block-copy tests**
+
+Append inside the existing `describe("MarkdownDocument")` in `src/components/MarkdownDocument.test.tsx`:
+
+```tsx
+  it("renders a copyable code block for fenced code with language", async () => {
+    vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn().mockResolvedValueOnce(undefined) } });
+    render(<MarkdownDocument markdown="```ts\nconst x = 1;\n```" documentPath="/docs/sample.md" />);
+    expect(screen.getByText("ts")).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
+    });
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("const x = 1;");
+    vi.unstubAllGlobals();
+  });
+
+  it("renders a copyable code block for fenced code without language", async () => {
+    vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn().mockResolvedValueOnce(undefined) } });
+    render(<MarkdownDocument markdown="```\nplain block\n```" documentPath="/docs/sample.md" />);
+    expect(screen.getByRole("button", { name: "复制代码" })).toBeInTheDocument();
+    expect(screen.queryByText("plain")).not.toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
+    });
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("plain block");
+    vi.unstubAllGlobals();
+  });
+```
+
 Add imports at the top of `src/components/MarkdownDocument.test.tsx`:
 
 ```tsx
-import { fireEvent, waitFor } from "@testing-library/react";
+import { act, fireEvent } from "@testing-library/react";
 import { vi } from "vitest";
+import { type ReactElement, type ReactNode } from "react";
 ```
 
 Run: `npm test -- --run src/components/MarkdownDocument.test.tsx`
-Expected: FAIL for the three new tests (copy button not found for fenced no-language, inline code has copy button, etc.).
+Expected: The two new block-copy tests FAIL; all other tests, including the inline-code baseline, PASS.
 
-- [ ] **Step 2: Replace the existing code component with pre-based block detection**
+- [ ] **Step 3: Replace the existing code component with pre-based block detection**
 
 Replace the `code` component in `src/components/MarkdownDocument.tsx` and add a `pre` component above it. Keep all other components unchanged.
 
@@ -421,11 +538,19 @@ Replace the `code` component in `src/components/MarkdownDocument.tsx` and add a 
             const childArray = Array.isArray(children) ? children : [children];
             if (childArray.length === 1) {
               const child = childArray[0];
-              if (isValidElement(child) && typeof child.type === "string" && child.type === "code") {
-                const className = (child.props.className as string | undefined) ?? "";
+              if (
+                isValidElement(child) &&
+                typeof child.type === "string" &&
+                child.type === "code"
+              ) {
+                const codeChild = child as ReactElement<{
+                  className?: string;
+                  children?: ReactNode;
+                }>;
+                const className = codeChild.props.className ?? "";
                 const match = /language-(\w+)/.exec(className);
                 const language = match?.[1] ?? "";
-                const code = String(child.props.children ?? "").replace(/\n$/, "");
+                const code = String(codeChild.props.children ?? "").replace(/\n$/, "");
                 return <CodeBlock code={code} language={language} />;
               }
             }
@@ -440,18 +565,19 @@ Replace the `code` component in `src/components/MarkdownDocument.tsx` and add a 
           },
 ```
 
-Also add the import for `CodeBlock` at the top of `src/components/MarkdownDocument.tsx`:
+Also add the imports at the top of `src/components/MarkdownDocument.tsx`:
 
 ```tsx
+import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { CodeBlock } from "./CodeBlock";
 ```
 
-- [ ] **Step 3: Run the tests**
+- [ ] **Step 4: Run the tests**
 
 Run: `npm test -- --run src/components/MarkdownDocument.test.tsx`
 Expected: PASS for all MarkdownDocument tests.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add src/components/MarkdownDocument.tsx src/components/MarkdownDocument.test.tsx
@@ -465,13 +591,13 @@ git commit -m "feat: route block code to CodeBlock, leave inline code unchanged"
 **Files:**
 - Modify: `src/components/OutlinePanel.tsx` (indentation)
 - Modify: `src/components/OutlinePanel.test.tsx` (indentation test)
-- Modify: `src/styles/kami.css` (outline panel, layout shift, reduced motion)
-- Modify: `src/styles/kami.css.test.ts` (CSS contract tests)
-- Modify: `src/App.test.tsx` (layout regression tests)
+- Modify: `src/styles/kami.css` (outline-only slice)
+- Modify: `src/styles/kami.css.test.ts` (outline-only CSS contract tests)
 
 **Interfaces:**
 - `OutlinePanel` props remain unchanged: `headings`, `activeHeadingId`, `onSelectHeading`.
 - `App` continues to toggle `app-shell__body--outline-open` and `outline-sidebar--open` classes.
+- Document/image stability is covered by the existing `keeps rendered images mounted when outline state changes` test in `src/App.test.tsx`; no new App tests are added.
 
 - [ ] **Step 1: Write the failing OutlinePanel indentation test**
 
@@ -504,7 +630,7 @@ to:
 style={{ paddingLeft: `${(heading.level - 1) * 12}px` }}
 ```
 
-- [ ] **Step 3: Write the failing CSS contract tests**
+- [ ] **Step 3: Write the failing outline CSS contract tests**
 
 Append to `src/styles/kami.css.test.ts`:
 
@@ -520,7 +646,11 @@ describe("kami.css outline floating panel", () => {
     expect(rule).toMatch(/bottom:\s*var\(--outline-inset\)/);
   });
 
-  it("shifts the document by panel width plus gutter on medium/wide", () => {
+  it("defines the outline shift as inset + width + gutter", () => {
+    expect(css).toMatch(/--outline-shift:\s*calc\(var\(--outline-inset\) \+ var\(--outline-width\) \+ var\(--outline-gutter\)\)/);
+  });
+
+  it("shifts the document by the outline shift on medium/wide", () => {
     const rule = css.match(/@media\s*\(min-width:\s*720px\)\s*\{[^}]*\.app-shell__body--outline-open\s*\.document-scroll\s*\{[^}]*\}/s)?.[0] ?? "";
     expect(rule).toMatch(/margin-left:\s*var\(--outline-shift\)/);
   });
@@ -529,35 +659,23 @@ describe("kami.css outline floating panel", () => {
     const rule = css.match(/@media\s*\(max-width:\s*719px\)\s*\{[^}]*\.app-shell__body--outline-open\s*\.document-scroll\s*\{[^}]*\}/s)?.[0] ?? "";
     expect(rule).toMatch(/margin-left:\s*0/);
   });
+});
 
+describe("kami.css outline reduced motion", () => {
   it("disables outline transitions under reduced motion", () => {
     const rule = css.match(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[^}]*\.outline-sidebar[^}]*transition:\s*none/s)?.[0] ?? "";
     expect(rule).toBeTruthy();
   });
-});
 
-describe("kami.css code copy visibility", () => {
-  it("hides the copy button by default and reveals it on hover or focus-within", () => {
-    const rule = css.match(/\.code-block__copy\s*\{[^}]*\}/s)?.[0] ?? "";
-    expect(rule).toMatch(/opacity:\s*0/);
-    const hoverRule = css.match(/\.code-block:hover\s*\.code-block__copy,\s*\.code-block:focus-within\s*\.code-block__copy\s*\{[^}]*\}/s)?.[0] ?? "";
-    expect(hoverRule).toMatch(/opacity:\s*1/);
-  });
-
-  it("keeps the copy button visible on touch/no-hover devices", () => {
-    const rule = css.match(/@media\s*\(hover:\s*none\)\s*\{[^}]*\.code-block__copy\s*\{[^}]*opacity:\s*1/s)?.[0] ?? "";
-    expect(rule).toBeTruthy();
-  });
-
-  it("disables code copy transitions under reduced motion", () => {
-    const rule = css.match(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[^}]*\.code-block__copy[^}]*transition:\s*none/s)?.[0] ?? "";
+  it("disables outline-scrim animation under reduced motion", () => {
+    const rule = css.match(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[^}]*\.outline-scrim[^}]*animation:\s*none/s)?.[0] ?? "";
     expect(rule).toBeTruthy();
   });
 });
 ```
 
 Run: `npm test -- --run src/styles/kami.css.test.ts`
-Expected: FAIL (new CSS variables and rules do not exist yet).
+Expected: The new outline CSS tests FAIL; existing code-copy and scroll-ownership tests PASS.
 
 - [ ] **Step 4: Update the CSS for the floating outline panel and responsive layout**
 
@@ -566,7 +684,7 @@ Add the new CSS variables to the existing `:root` block in `src/styles/kami.css`
 ```css
   --outline-inset: 12px;
   --outline-gutter: 20px;
-  --outline-shift: calc(var(--outline-width) + var(--outline-gutter));
+  --outline-shift: calc(var(--outline-inset) + var(--outline-width) + var(--outline-gutter));
 ```
 
 Replace the existing `.outline-sidebar` rules and the medium/narrow media queries with:
@@ -664,40 +782,24 @@ Replace the existing `.outline-sidebar` rules and the medium/narrow media querie
 @media (prefers-reduced-motion: reduce) {
   .outline-sidebar,
   .document-scroll,
-  .code-block__copy {
+  .outline-scrim {
     transition: none;
+    animation: none;
   }
 }
 ```
 
 Remove the old `.outline-sidebar` block, `.outline-sidebar--open`, `.outline-panel`, `.outline-panel__header`, `.outline-panel__link`, `.outline-panel__link--active`, and the old media queries at lines 355–373. Keep the `.outline-panel__list`, `.outline-panel__item`, `.outline-panel__empty`, `.outline-scrim`, and `@keyframes` rules untouched.
 
-- [ ] **Step 5: Write the App layout regression tests**
+- [ ] **Step 5: Run the tests**
 
-Append to `src/App.test.tsx` inside `describe("App outline integration")`:
-
-```tsx
-  it("applies the outline-open layout class to the document scroll container", async () => {
-    await loadDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Toggle outline" }));
-    expect(document.querySelector(".app-shell__body--outline-open")).toBeInTheDocument();
-  });
-
-  it("keeps the document column mounted when the outline state changes", async () => {
-    await loadDocument();
-    const scroll = document.querySelector(".document-scroll");
-    fireEvent.click(screen.getByRole("button", { name: "Toggle outline" }));
-    expect(document.querySelector(".document-scroll")).toBe(scroll);
-  });
-```
-
-Run: `npm test -- --run src/styles/kami.css.test.ts src/components/OutlinePanel.test.tsx src/App.test.tsx`
+Run: `npm test -- --run src/styles/kami.css.test.ts src/components/OutlinePanel.test.tsx`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/components/OutlinePanel.tsx src/components/OutlinePanel.test.tsx src/styles/kami.css src/styles/kami.css.test.ts src/App.test.tsx
+git add src/components/OutlinePanel.tsx src/components/OutlinePanel.test.tsx src/styles/kami.css src/styles/kami.css.test.ts
 git commit -m "feat: floating outline panel, gutter shift, and responsive layout"
 ```
 
@@ -732,7 +834,7 @@ Expected: Tauri build succeeds and produces the installer/executable in `src-tau
 
 Open the built app or `npm run dev` and verify:
 
-- [ ] Toggle the outline on a medium/wide window: the outline appears as a floating panel with rounded corners, soft border, and subtle shadow; the document shifts right smoothly.
+- [ ] Toggle the outline on a medium/wide window: the outline appears as a floating panel with rounded corners, soft border, and subtle shadow; the document shifts right by `272px` (12 + 240 + 20).
 - [ ] At ≥1280px the reading column expands to the wide max-width (`960px`).
 - [ ] Resize to <720px: the outline becomes an overlay and the scrim appears; the document does not shift.
 - [ ] Click the scrim or select a heading on narrow: the outline closes.
@@ -744,7 +846,7 @@ Open the built app or `npm run dev` and verify:
 - [ ] Copy a fenced block with no language: it is still copyable and no language label is shown.
 - [ ] Inline `code` elements have no copy button.
 - [ ] Images in the document remain stable when the outline is toggled (no flicker or reload).
-- [ ] Enable `prefers-reduced-motion`: outline transitions and document shifts are instant; code-copy hover fade is disabled.
+- [ ] Enable `prefers-reduced-motion`: outline transitions, document shifts, and the outline-scrim fade are instant; code-copy hover fade is disabled.
 
 - [ ] **Step 5: Commit (no-op if verification only)**
 
@@ -756,12 +858,15 @@ If no source changes were needed to pass verification, skip the commit. If any t
 
 **1. Spec coverage:**
 - Floating outline panel with 10–12px inset, 6px radius, thin border, subtle shadow → Task 3 CSS.
-- Document shift by panel width + ~20px gutter on medium/wide, overlay/scrim on narrow → Task 3 CSS and tests.
+- Correct document shift: `12 + 240 + 20 = 272px` via `--outline-shift` → Task 3 CSS and CSS test.
 - Active heading brand marker and h1–h3 indentation → Task 3 component + CSS tests.
 - Copy button on block code only, exact raw copy → Tasks 1 and 2.
+- Fenced no-language blocks are copyable → Task 2 `pre` detector and Task 1 `language` optional prop.
+- Sanitized raw HTML `<pre><code>` blocks receive copy controls → Task 2 `pre` detector.
+- Inline `<code>` unchanged → Task 2 baseline test.
 - Success/failure Chinese feedback with 1.5s timer → Task 1.
-- aria-label, aria-live, focus-within, touch visibility → Tasks 1 and 3 CSS.
-- Reduced motion → Task 3 CSS.
+- aria-label, aria-live, focus-within, touch visibility → Task 1.
+- Reduced motion for outline panel, document shift, code-copy, and outline-scrim → Tasks 1 and 3 CSS.
 - No new dependencies → no new imports in plan.
 - Preserve existing Prism output and document/image stability → Tasks 1 and 3.
 
@@ -774,12 +879,25 @@ If no source changes were needed to pass verification, skip the commit. If any t
 **3. Type/API consistency:**
 - `CodeBlock` accepts `code: string` and `language?: string` in both implementation and tests.
 - `MarkdownDocument` passes `code` and `language` to `CodeBlock`.
+- `MarkdownDocument` `pre` detection casts the rendered `<code>` child to `ReactElement<{ className?: string; children?: ReactNode }>` before accessing props.
 - `OutlinePanel` props are unchanged.
 - `App` CSS class names are unchanged.
 
-**4. Unlabeled fenced blocks are copyable:**
+**4. Unlabeled fenced blocks and raw HTML pre blocks are copyable:**
 - The `pre` detector runs for every `<pre><code>` pair regardless of `className`.
 - If no language class matches, `language` is `""` and `CodeBlock` still renders the copy button without a language label.
 - Inline `<code>` is never wrapped in `<pre>` and therefore never routed to `CodeBlock`.
 
-**Self-review result:** PASS. No gaps, no placeholders, types are consistent, and all block code is copyable.
+**5. Semantic structure and specificity:**
+- `CodeBlock` renders a semantic `<pre className="code-block">` root.
+- `SyntaxHighlighter` uses `PreTag="div"`, so there is no nested `<pre>`.
+- CSS selectors use `pre.code-block` and `pre.code-block .code-block__copy` to override `.markdown-body pre`, `.markdown-body pre code`, and `.markdown-body button` defaults.
+- The copy button uses `margin-left: auto` so it remains top-right even when no language label is present.
+
+**6. Fake-timer tests and clipboard mocks:**
+- Clipboard is mocked with `vi.stubGlobal` and restored with `vi.unstubAllGlobals` in `afterEach`.
+- Copied/error states are awaited after the promise resolves/rejects.
+- Timers are advanced with `await act(async () => { await vi.advanceTimersByTimeAsync(1500); })`.
+- Timer cleanup is asserted with `vi.getTimerCount()` before and after unmount.
+
+**Self-review result:** PASS. No gaps, no placeholders, types are consistent, all block code is copyable, semantic structure is preserved, and fake-timer/clipboard tests are reliable.
