@@ -4,7 +4,7 @@
 
 **Goal:** Polish the outline into a restrained floating utility panel and add a quiet copy control to every block code element, without changing the document’s existing behavior or remounting the Markdown/image subtree.
 
-**Architecture:** A new focused `CodeBlock` component owns the copy button, language label, and Prism syntax highlighting. `MarkdownDocument` detects block code by overriding `components.pre` and inspecting the rendered `<code>` child, so both fenced language and no-language blocks are copyable while inline `<code>` remains unchanged. The outline becomes a fixed-position floating panel using `kami.css` variables; the layout shift is driven by a single CSS class on `app-shell__body`.
+**Architecture:** A new focused `CodeBlock` component owns the copy button, language label, and Prism syntax highlighting. `CodeBlock` renders a neutral wrapper `<div className="code-block">` and lets `SyntaxHighlighter` emit the real semantic `<pre><code>` block inside it, so ReactMarkdown’s source `<pre>` is replaced cleanly and there is no nested `<pre>`. `MarkdownDocument` detects block code by overriding `components.pre` and inspecting the rendered `<code>` child, so both fenced language and no-language blocks are copyable while inline `<code>` remains unchanged. The outline becomes a fixed-position floating panel using `kami.css` variables; the layout shift is driven by a single CSS class on `app-shell__body`.
 
 **Tech Stack:** React 19.2.7, TypeScript 6.0.3, react-markdown 10.1.0, react-syntax-highlighter 16.1.1, Prism / oneLight, Vitest 4.1.9, jsdom 29.1.1, Tauri 2.11.4.
 
@@ -27,15 +27,15 @@
 
 | File | Responsibility |
 |------|----------------|
-| `src/components/CodeBlock.tsx` | New wrapper: semantic `<pre className="code-block">`, Prism syntax highlighter with `PreTag="div"`, language label, copy button, status state, timer cleanup, aria-live region. |
-| `src/components/CodeBlock.test.tsx` | Unit tests for semantic structure, Prism class, copy success/failure, timer cleanup, language label, accessibility. |
-| `src/components/MarkdownDocument.tsx` | Detect block code via `components.pre`; route block code to `CodeBlock` and inline code to `<code>`. Copy controls apply to any rendered `<pre><code>` block, including sanitized raw HTML. |
-| `src/components/MarkdownDocument.test.tsx` | Baseline inline-code test (already passes); failing tests for fenced language and fenced no-language block copy. |
+| `src/components/CodeBlock.tsx` | New wrapper: `<div className="code-block">` containing header, copy button, status; `SyntaxHighlighter` emits real `<pre><code>` inside `.code-block__body`. |
+| `src/components/CodeBlock.test.tsx` | Unit tests for wrapper structure, no nested `<pre>`, Prism class, copy success/failure, timer cancellation, language label, accessibility. |
+| `src/components/MarkdownDocument.tsx` | Detect block code via `components.pre` (robust to whitespace); route block code to `CodeBlock` and inline code to `<code>`. Copy controls apply to any rendered `<pre><code>` block, including sanitized raw HTML. |
+| `src/components/MarkdownDocument.test.tsx` | Baseline inline-code test (already passes); failing tests for fenced language, fenced no-language, and sanitized raw HTML block copy. |
 | `src/components/OutlinePanel.tsx` | Update indentation multiplier from 16px to 12px per level (h1→h3: 0, 12, 24). |
 | `src/components/OutlinePanel.test.tsx` | Add indentation contract test. |
 | `src/App.tsx` | No public prop changes; existing CSS-class toggle stays. Regression tests only. |
 | `src/App.test.tsx` | No new tests needed; existing image DOM-identity test already covers document stability. |
-| `src/styles/kami.css` | Floating outline panel styles, document shift/gutter, reduced motion; scoped code-block copy styles with explicit resets against `.markdown-body` rules. |
+| `src/styles/kami.css` | Floating outline panel styles, document shift/gutter, reduced motion; scoped `.code-block` copy styles with explicit resets against `.markdown-body` rules. |
 | `src/styles/kami.css.test.ts` | Code-copy CSS contract tests (Task 1) and outline CSS contract tests (Task 3). |
 
 ---
@@ -51,7 +51,7 @@
 **Interfaces:**
 - Consumes: `code: string`, `language?: string`
 - Produces: `CodeBlock` component exported from `src/components/CodeBlock.tsx`
-- Rendered structure: `<pre className="code-block">` containing a header row, a `.code-block__body` div, and a visually hidden `aria-live` status. `SyntaxHighlighter` renders with `PreTag="div"` inside the body, so no nested `<pre>` is produced.
+- Rendered structure: `<div className="code-block">` containing a header row, a `.code-block__body` div, and a visually hidden `aria-live` status. `SyntaxHighlighter` is configured with `PreTag="pre"` so it emits the real semantic `<pre><code>` block inside the body. Because ReactMarkdown `components.pre` replaces the source `<pre>` with this wrapper, there is no nested `<pre>`.
 
 - [ ] **Step 1: Write the failing component tests**
 
@@ -68,15 +68,16 @@ describe("CodeBlock", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    vi.runOnlyPendingTimers();
+    vi.clearAllTimers();
     vi.useRealTimers();
   });
 
-  it("renders a semantic pre root with no nested pre", () => {
+  it("renders the wrapper with a single real pre inside and no nested pre", () => {
     const { container } = render(<CodeBlock code="const x = 1;" />);
+    expect(container.querySelector(".code-block")).toBeInTheDocument();
     const pres = container.querySelectorAll("pre");
     expect(pres).toHaveLength(1);
-    expect(pres[0]).toHaveClass("code-block");
+    expect(container.querySelector(".code-block pre")).toBeInTheDocument();
     expect(pres[0]).toHaveTextContent("const x = 1;");
   });
 
@@ -95,8 +96,8 @@ describe("CodeBlock", () => {
 
   it("preserves the Prism class on the syntax-highlighter output", () => {
     const { container } = render(<CodeBlock code="const x = 1;" language="ts" />);
-    const highlighter = container.querySelector(".code-block__body > div");
-    expect(highlighter).toHaveClass("prism-code");
+    const pre = container.querySelector(".code-block pre");
+    expect(pre).toHaveClass("prism-code");
   });
 
   it("copies the exact raw code string on click", async () => {
@@ -135,7 +136,7 @@ describe("CodeBlock", () => {
     expect(screen.getByRole("status")).toHaveTextContent("");
   });
 
-  it("clears the running timer when unmounted", async () => {
+  it("cancels the running timer on unmount", async () => {
     vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn().mockResolvedValueOnce(undefined) } });
     const { unmount } = render(<CodeBlock code="x" />);
     await act(async () => {
@@ -205,7 +206,7 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
   const visibleLabel = isCopied ? "已复制" : isError ? "复制失败" : "复制代码";
 
   return (
-    <pre className="code-block">
+    <div className="code-block">
       <div className="code-block__header">
         {language ? <span className="code-block__lang">{language}</span> : null}
         <button
@@ -242,7 +243,7 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
         <SyntaxHighlighter
           language={language || "text"}
           style={oneLight}
-          PreTag="div"
+          PreTag="pre"
           customStyle={{
             margin: 0,
             borderRadius: "6px",
@@ -257,7 +258,7 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
       <span className="code-block__status" aria-live="polite" aria-atomic="true">
         {isCopied ? "已复制" : isError ? "复制失败" : ""}
       </span>
-    </pre>
+    </div>
   );
 }
 ```
@@ -272,37 +273,44 @@ Expected: PASS for all CodeBlock tests.
 Append to `src/styles/kami.css.test.ts`:
 
 ```tsx
-describe("kami.css code-block specificity and resets", () => {
-  it("scopes code-block rules to pre.code-block to override markdown-body defaults", () => {
-    expect(css).toMatch(/pre\.code-block\s*\{/s);
-    expect(css).toMatch(/pre\.code-block\s+code\s*\{/s);
-    expect(css).toMatch(/pre\.code-block\s+\.code-block__copy\s*\{/s);
-    expect(css).toMatch(/pre\.code-block\s+\.code-block__body\s*\u003e\s*div\s*\{/s);
+describe("kami.css code-block structure and resets", () => {
+  it("declares scoped selectors for the wrapper, inner pre, inner div, and inner code", () => {
+    expect(css).toMatch(/\.code-block\s*\{/s);
+    expect(css).toMatch(/\.code-block\s+pre\s*\{/s);
+    expect(css).toMatch(/\.code-block\s+pre\s*\u003e\s*div\s*\{/s);
+    expect(css).toMatch(/\.code-block\s+(pre\s+)?code\s*\{/s);
   });
 
   it("pushes the copy button to the top-right when no language label is present", () => {
-    const rule = css.match(/pre\.code-block\s+\.code-block__copy\s*\{[^}]*\}/s)?.[0] ?? "";
+    const rule = css.match(/\.code-block\s+\.code-block__copy\s*\{[^}]*\}/s)?.[0] ?? "";
     expect(rule).toMatch(/margin-left:\s*auto/);
+  });
+
+  it("resets the copy button height and active transform against markdown-body button", () => {
+    const rule = css.match(/\.code-block\s+\.code-block__copy\s*\{[^}]*\}/s)?.[0] ?? "";
+    expect(rule).toMatch(/min-height:\s*(0|28px)/);
+    const activeRule = css.match(/\.code-block\s+\.code-block__copy:active\s*\{[^}]*\}/s)?.[0] ?? "";
+    expect(activeRule).toMatch(/transform:\s*none/);
   });
 });
 
 describe("kami.css code copy visibility", () => {
   it("hides the copy button by default and reveals it on hover or focus-within", () => {
-    const rule = css.match(/pre\.code-block\s+\.code-block__copy\s*\{[^}]*\}/s)?.[0] ?? "";
+    const rule = css.match(/\.code-block\s+\.code-block__copy\s*\{[^}]*\}/s)?.[0] ?? "";
     expect(rule).toMatch(/opacity:\s*0/);
-    const hoverRule = css.match(/pre\.code-block:hover\s+\.code-block__copy,\s*pre\.code-block:focus-within\s+\.code-block__copy\s*\{[^}]*\}/s)?.[0] ?? "";
+    const hoverRule = css.match(/\.code-block:hover\s+\.code-block__copy,\s*\.code-block:focus-within\s+\.code-block__copy\s*\{[^}]*\}/s)?.[0] ?? "";
     expect(hoverRule).toMatch(/opacity:\s*1/);
   });
 
   it("keeps the copy button visible on touch/no-hover devices", () => {
-    const rule = css.match(/@media\s*\(hover:\s*none\)\s*\{[^}]*pre\.code-block\s+\.code-block__copy\s*\{[^}]*opacity:\s*1/s)?.[0] ?? "";
+    const rule = css.match(/@media\s*\(hover:\s*none\)\s*\{[^}]*\.code-block\s+\.code-block__copy\s*\{[^}]*opacity:\s*1/s)?.[0] ?? "";
     expect(rule).toBeTruthy();
   });
 });
 
 describe("kami.css code copy reduced motion", () => {
   it("disables code copy transitions under reduced motion", () => {
-    const rule = css.match(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[^}]*pre\.code-block\s+\.code-block__copy[^}]*transition:\s*none/s)?.[0] ?? "";
+    const rule = css.match(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[^}]*\.code-block\s+\.code-block__copy[^}]*transition:\s*none/s)?.[0] ?? "";
     expect(rule).toBeTruthy();
   });
 });
@@ -316,11 +324,8 @@ Expected: The new code-copy CSS contract tests FAIL; existing scroll-ownership t
 Append to `src/styles/kami.css`:
 
 ```css
-pre.code-block {
-  display: flex;
-  flex-direction: column;
+.code-block {
   margin: 14px 0;
-  padding: 0;
   border-radius: 6px;
   background: var(--ivory);
   overflow: hidden;
@@ -330,8 +335,24 @@ pre.code-block {
   line-height: 1.5;
 }
 
-pre.code-block > code,
-pre.code-block code {
+.code-block pre {
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.code-block pre > div {
+  padding: 14px 19px !important;
+  background: transparent !important;
+}
+
+.code-block pre code,
+.code-block code {
   padding: 0;
   border-radius: 0;
   background: transparent !important;
@@ -340,7 +361,7 @@ pre.code-block code {
   line-height: inherit;
 }
 
-pre.code-block .code-block__header {
+.code-block__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -348,7 +369,7 @@ pre.code-block .code-block__header {
   padding: 8px 12px;
 }
 
-pre.code-block .code-block__lang {
+.code-block__lang {
   color: var(--stone);
   font-family: var(--mono);
   font-size: 11px;
@@ -356,12 +377,13 @@ pre.code-block .code-block__lang {
   letter-spacing: 0.3px;
 }
 
-pre.code-block .code-block__copy {
+.code-block .code-block__copy {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
   min-width: 28px;
+  min-height: 0;
   height: 28px;
   padding: 0 7px;
   margin: 0;
@@ -379,29 +401,33 @@ pre.code-block .code-block__copy {
   opacity: 0;
 }
 
-pre.code-block .code-block__copy:hover {
+.code-block .code-block__copy:hover {
   background-color: rgba(27, 54, 93, 0.08);
   color: var(--brand);
 }
 
-pre.code-block .code-block__copy:focus-visible {
+.code-block .code-block__copy:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: -2px;
   opacity: 1;
 }
 
-pre.code-block:hover .code-block__copy,
-pre.code-block:focus-within .code-block__copy {
+.code-block .code-block__copy:active {
+  transform: none;
+}
+
+.code-block:hover .code-block__copy,
+.code-block:focus-within .code-block__copy {
   opacity: 1;
 }
 
 @media (hover: none) {
-  pre.code-block .code-block__copy {
+  .code-block .code-block__copy {
     opacity: 1;
   }
 }
 
-pre.code-block .code-block__copy-icon {
+.code-block__copy-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -409,27 +435,22 @@ pre.code-block .code-block__copy-icon {
   height: 14px;
 }
 
-pre.code-block .code-block__copy-icon svg {
+.code-block__copy-icon svg {
   width: 100%;
   height: 100%;
 }
 
-pre.code-block .code-block__copy-label {
+.code-block__copy-label {
   font-family: var(--serif);
   font-size: 12px;
 }
 
-pre.code-block .code-block__body {
+.code-block__body {
   min-width: 0;
   overflow-x: auto;
 }
 
-pre.code-block .code-block__body > div {
-  padding: 14px 19px !important;
-  background: transparent !important;
-}
-
-pre.code-block .code-block__status {
+.code-block__status {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -442,7 +463,7 @@ pre.code-block .code-block__status {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  pre.code-block .code-block__copy {
+  .code-block .code-block__copy {
     transition: none;
   }
 }
@@ -516,6 +537,17 @@ Append inside the existing `describe("MarkdownDocument")` in `src/components/Mar
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("plain block");
     vi.unstubAllGlobals();
   });
+
+  it("renders copy controls for sanitized raw HTML pre > code", async () => {
+    vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn().mockResolvedValueOnce(undefined) } });
+    render(<MarkdownDocument markdown="<pre><code>raw html</code></pre>" documentPath="/docs/sample.md" />);
+    expect(screen.getByRole("button", { name: "复制代码" })).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
+    });
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("raw html");
+    vi.unstubAllGlobals();
+  });
 ```
 
 Add imports at the top of `src/components/MarkdownDocument.test.tsx`:
@@ -527,17 +559,23 @@ import { type ReactElement, type ReactNode } from "react";
 ```
 
 Run: `npm test -- --run src/components/MarkdownDocument.test.tsx`
-Expected: The two new block-copy tests FAIL; all other tests, including the inline-code baseline, PASS.
+Expected: The three new block-copy tests FAIL; all other tests, including the inline-code baseline, PASS.
 
-- [ ] **Step 3: Replace the existing code component with pre-based block detection**
+- [ ] **Step 3: Replace the existing code component with whitespace-robust pre-based block detection**
 
 Replace the `code` component in `src/components/MarkdownDocument.tsx` and add a `pre` component above it. Keep all other components unchanged.
 
 ```tsx
           pre: ({ children }) => {
             const childArray = Array.isArray(children) ? children : [children];
-            if (childArray.length === 1) {
-              const child = childArray[0];
+            const nonWhitespaceChildren = childArray.filter((child) => {
+              if (typeof child === "string" || typeof child === "number") {
+                return String(child).trim() !== "";
+              }
+              return true;
+            });
+            if (nonWhitespaceChildren.length === 1) {
+              const child = nonWhitespaceChildren[0];
               if (
                 isValidElement(child) &&
                 typeof child.type === "string" &&
@@ -862,7 +900,7 @@ If no source changes were needed to pass verification, skip the commit. If any t
 - Active heading brand marker and h1–h3 indentation → Task 3 component + CSS tests.
 - Copy button on block code only, exact raw copy → Tasks 1 and 2.
 - Fenced no-language blocks are copyable → Task 2 `pre` detector and Task 1 `language` optional prop.
-- Sanitized raw HTML `<pre><code>` blocks receive copy controls → Task 2 `pre` detector.
+- Sanitized raw HTML `<pre><code>` blocks receive copy controls → Task 2 robust `pre` detector + integration test.
 - Inline `<code>` unchanged → Task 2 baseline test.
 - Success/failure Chinese feedback with 1.5s timer → Task 1.
 - aria-label, aria-live, focus-within, touch visibility → Task 1.
@@ -870,34 +908,43 @@ If no source changes were needed to pass verification, skip the commit. If any t
 - No new dependencies → no new imports in plan.
 - Preserve existing Prism output and document/image stability → Tasks 1 and 3.
 
-**2. Placeholder scan:**
+**2. Valid HTML structure and no nested `<pre>`:**
+- ReactMarkdown `components.pre` replaces the source `<pre>` with a neutral `<div className="code-block">` wrapper.
+- `SyntaxHighlighter` is configured with `PreTag="pre"` and emits the real semantic `<pre><code>` block inside `.code-block__body`.
+- Because the source `<pre>` is replaced, there is only one `<pre>` in the final output (the one from SyntaxHighlighter), and no nested `<pre>`.
+- Divs are never placed inside a `<pre>` element.
+
+**3. Scoped CSS resets:**
+- `.code-block pre` resets `.markdown-body pre` (margin, padding, background, overflow).
+- `.code-block pre > div` resets `.markdown-body pre > div` (padding, background) with the same `!important` values.
+- `.code-block pre code` and `.code-block code` reset `.markdown-body pre code` and `.markdown-body code` (padding, background, color, radius).
+- `.code-block .code-block__copy` overrides `.markdown-body button` (min-height 0, height 28px, margin-left auto, no box-shadow, no transform on active).
+- CSS contract tests assert these structural/reset selectors and the required declarations (`min-height`, `transform: none`, `margin-left: auto`).
+
+**4. Placeholder scan:**
 - No “TBD”, “TODO”, “implement later”, or open-ended phrases.
 - No “add appropriate error handling” without code.
 - No “similar to Task X” references.
 - Every step contains concrete code, commands, and expected outcomes.
 
-**3. Type/API consistency:**
+**5. Type/API consistency:**
 - `CodeBlock` accepts `code: string` and `language?: string` in both implementation and tests.
 - `MarkdownDocument` passes `code` and `language` to `CodeBlock`.
-- `MarkdownDocument` `pre` detection casts the rendered `<code>` child to `ReactElement<{ className?: string; children?: ReactNode }>` before accessing props.
+- `MarkdownDocument` `pre` detection filters whitespace, then casts the single rendered `<code>` child to `ReactElement<{ className?: string; children?: ReactNode }>` before accessing props.
 - `OutlinePanel` props are unchanged.
 - `App` CSS class names are unchanged.
 
-**4. Unlabeled fenced blocks and raw HTML pre blocks are copyable:**
-- The `pre` detector runs for every `<pre><code>` pair regardless of `className`.
+**6. Unlabeled fenced blocks and raw HTML pre blocks are copyable:**
+- The `pre` detector runs for every `<pre><code>` pair regardless of surrounding whitespace or `className`.
 - If no language class matches, `language` is `""` and `CodeBlock` still renders the copy button without a language label.
+- If the `<pre>` contains mixed or non-whitespace non-code children, it falls back to a plain `<pre>`.
 - Inline `<code>` is never wrapped in `<pre>` and therefore never routed to `CodeBlock`.
 
-**5. Semantic structure and specificity:**
-- `CodeBlock` renders a semantic `<pre className="code-block">` root.
-- `SyntaxHighlighter` uses `PreTag="div"`, so there is no nested `<pre>`.
-- CSS selectors use `pre.code-block` and `pre.code-block .code-block__copy` to override `.markdown-body pre`, `.markdown-body pre code`, and `.markdown-body button` defaults.
-- The copy button uses `margin-left: auto` so it remains top-right even when no language label is present.
-
-**6. Fake-timer tests and clipboard mocks:**
+**7. Fake-timer tests and clipboard mocks:**
 - Clipboard is mocked with `vi.stubGlobal` and restored with `vi.unstubAllGlobals` in `afterEach`.
+- `afterEach` uses `vi.clearAllTimers()` instead of running pending timers.
 - Copied/error states are awaited after the promise resolves/rejects.
 - Timers are advanced with `await act(async () => { await vi.advanceTimersByTimeAsync(1500); })`.
-- Timer cleanup is asserted with `vi.getTimerCount()` before and after unmount.
+- A dedicated timer-cancellation test asserts `vi.getTimerCount()` is 1 after copied state, then 0 after unmount, proving the component clears its own timer.
 
-**Self-review result:** PASS. No gaps, no placeholders, types are consistent, all block code is copyable, semantic structure is preserved, and fake-timer/clipboard tests are reliable.
+**Self-review result:** PASS. No gaps, no placeholders, types are consistent, all block code is copyable, the markup is valid with no nested `<pre>`, scoped CSS resets are explicit, and fake-timer/clipboard tests are reliable.
