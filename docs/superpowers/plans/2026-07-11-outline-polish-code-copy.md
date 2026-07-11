@@ -28,7 +28,7 @@
 | File | Responsibility |
 |------|----------------|
 | `src/components/CodeBlock.tsx` | New wrapper: `<div className="code-block">` containing header, copy button, status; `SyntaxHighlighter` emits real `<pre><code>` inside `.code-block__body`. |
-| `src/components/CodeBlock.test.tsx` | Unit tests for wrapper structure, no nested `<pre>`, Prism class, copy success/failure, timer cancellation, language label, accessibility. |
+| `src/components/CodeBlock.test.tsx` | Unit tests for wrapper structure, no nested `<pre>`, semantic `pre > code`, language class, copy success/failure, timer cancellation, language label, accessibility. |
 | `src/components/MarkdownDocument.tsx` | Detect block code via `components.pre` (robust to whitespace); route block code to `CodeBlock` and inline code to `<code>`. Copy controls apply to any rendered `<pre><code>` block, including sanitized raw HTML. |
 | `src/components/MarkdownDocument.test.tsx` | Baseline inline-code test (already passes); failing tests for fenced language, fenced no-language, and sanitized raw HTML block copy. |
 | `src/components/OutlinePanel.tsx` | Update indentation multiplier from 16px to 12px per level (h1→h3: 0, 12, 24). |
@@ -94,10 +94,13 @@ describe("CodeBlock", () => {
     expect(screen.queryByText("plain")).not.toBeInTheDocument();
   });
 
-  it("preserves the Prism class on the syntax-highlighter output", () => {
+  it("emits a semantic pre > code pair with a language class", () => {
     const { container } = render(<CodeBlock code="const x = 1;" language="ts" />);
-    const pre = container.querySelector(".code-block pre");
-    expect(pre).toHaveClass("prism-code");
+    const pres = container.querySelectorAll(".code-block pre");
+    expect(pres).toHaveLength(1);
+    const code = pres[0].querySelector("code");
+    expect(code).toBeInTheDocument();
+    expect(pres[0]).toHaveClass("language-ts");
   });
 
   it("copies the exact raw code string on click", async () => {
@@ -274,11 +277,10 @@ Append to `src/styles/kami.css.test.ts`:
 
 ```tsx
 describe("kami.css code-block structure and resets", () => {
-  it("declares scoped selectors for the wrapper, inner pre, inner div, and inner code", () => {
+  it("declares scoped selectors for the wrapper, inner pre, and inner code", () => {
     expect(css).toMatch(/\.code-block\s*\{/s);
     expect(css).toMatch(/\.code-block\s+pre\s*\{/s);
-    expect(css).toMatch(/\.code-block\s+pre\s*\u003e\s*div\s*\{/s);
-    expect(css).toMatch(/\.code-block\s+(pre\s+)?code\s*\{/s);
+    expect(css).toMatch(/\.code-block\s+pre\s+code\s*\{/s);
   });
 
   it("pushes the copy button to the top-right when no language label is present", () => {
@@ -337,22 +339,16 @@ Append to `src/styles/kami.css`:
 
 .code-block pre {
   margin: 0;
-  padding: 0;
+  padding: 14px 19px;
   border-radius: 0;
   background: transparent;
-  overflow: visible;
+  overflow-x: auto;
   font-family: inherit;
   font-size: inherit;
   line-height: inherit;
 }
 
-.code-block pre > div {
-  padding: 14px 19px !important;
-  background: transparent !important;
-}
-
-.code-block pre code,
-.code-block code {
+.code-block pre code {
   padding: 0;
   border-radius: 0;
   background: transparent !important;
@@ -555,7 +551,6 @@ Add imports at the top of `src/components/MarkdownDocument.test.tsx`:
 ```tsx
 import { act, fireEvent } from "@testing-library/react";
 import { vi } from "vitest";
-import { type ReactElement, type ReactNode } from "react";
 ```
 
 Run: `npm test -- --run src/components/MarkdownDocument.test.tsx`
@@ -915,9 +910,8 @@ If no source changes were needed to pass verification, skip the commit. If any t
 - Divs are never placed inside a `<pre>` element.
 
 **3. Scoped CSS resets:**
-- `.code-block pre` resets `.markdown-body pre` (margin, padding, background, overflow).
-- `.code-block pre > div` resets `.markdown-body pre > div` (padding, background) with the same `!important` values.
-- `.code-block pre code` and `.code-block code` reset `.markdown-body pre code` and `.markdown-body code` (padding, background, color, radius).
+- `.code-block pre` resets `.markdown-body pre` (margin, padding `14px 19px`, background, overflow) and carries the block geometry/padding exactly once.
+- `.code-block pre code` resets `.markdown-body pre code` and `.markdown-body code` (padding, background, color, radius).
 - `.code-block .code-block__copy` overrides `.markdown-body button` (min-height 0, height 28px, margin-left auto, no box-shadow, no transform on active).
 - CSS contract tests assert these structural/reset selectors and the required declarations (`min-height`, `transform: none`, `margin-left: auto`).
 
