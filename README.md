@@ -38,6 +38,7 @@ Both installers automatically register `.md` and `.markdown` file associations, 
 - **External links.** Markdown hyperlinks open in your default browser.
 - **Custom overlay scrollbar.** A 6 px scrollbar that appears while scrolling or when the cursor is near the right edge.
 - **Frameless native window.** Clean top bar with square window controls and an icon-only Open button.
+- **Document outline.** A collapsible left sidebar lists h1–h3 headings, highlights the current section as you scroll, and lets you jump to any heading with one click.
 
 ## Usage
 

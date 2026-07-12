@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { OutlineHeading } from "../types";
 
 export function useOutlineSync(
@@ -7,9 +7,18 @@ export function useOutlineSync(
 ): string | undefined {
   const [activeHeadingId, setActiveHeadingId] = useState<string | undefined>(undefined);
   const headingIdsKey = useMemo(() => headings.map((h) => h.id).join(","), [headings]);
+  const activeRef = useRef(activeHeadingId);
+  activeRef.current = activeHeadingId;
 
   useEffect(() => {
-    if (!contentRef.current || headings.length === 0) return;
+    if (!contentRef.current) return;
+
+    if (headings.length === 0) {
+      if (activeRef.current !== undefined) {
+        setActiveHeadingId(undefined);
+      }
+      return;
+    }
 
     const container = contentRef.current;
     const headingIds = headings.map((h) => h.id);
@@ -31,8 +40,12 @@ export function useOutlineSync(
         }
       }
 
-      setActiveHeadingId(bestId);
+      if (activeRef.current !== bestId) {
+        setActiveHeadingId(bestId);
+      }
     };
+
+    const handleScroll = () => updateActive();
 
     if (typeof window.IntersectionObserver !== "undefined") {
       const observer = new IntersectionObserver(
@@ -51,14 +64,15 @@ export function useOutlineSync(
         if (element) observer.observe(element);
       }
 
+      container.addEventListener("scroll", handleScroll, { passive: true });
       updateActive();
 
       return () => {
+        container.removeEventListener("scroll", handleScroll);
         observer.disconnect();
       };
     }
 
-    const handleScroll = () => updateActive();
     container.addEventListener("scroll", handleScroll, { passive: true });
     updateActive();
 

@@ -23,7 +23,7 @@ export function OutlinePanel({ headings, activeHeadingId, onSelectHeading }: Out
           <li
             key={heading.id}
             className="outline-panel__item"
-            style={{ paddingLeft: `${(heading.level - 1) * 16}px` }}
+            style={{ paddingLeft: `${(heading.level - 1) * 12}px` }}
           >
             <button
               type="button"

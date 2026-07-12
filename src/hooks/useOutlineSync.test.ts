@@ -275,4 +275,109 @@ describe("useOutlineSync", () => {
     document.body.removeChild(container);
     window.IntersectionObserver = mockedObserver;
   });
+
+  it("clears active heading when headings become empty", () => {
+    const container = document.createElement("div");
+    container.innerHTML = '<h1 id="title">Title</h1>';
+    document.body.appendChild(container);
+
+    const { result, rerender } = renderHook(
+      (props: { headings: OutlineHeading[] }) => {
+        const contentRef = useRef<HTMLDivElement | null>(container as unknown as HTMLDivElement);
+        return useOutlineSync(contentRef, props.headings);
+      },
+      {
+        initialProps: { headings: [{ id: "title", level: 1, text: "Title" }] },
+      }
+    );
+
+    expect(result.current).toBe("title");
+
+    rerender({ headings: [] });
+
+    expect(result.current).toBeUndefined();
+
+    document.body.removeChild(container);
+  });
+
+  it("listens to scroll events even when IntersectionObserver is available", () => {
+    const headings: OutlineHeading[] = [
+      { id: "title", level: 1, text: "Title" },
+      { id: "section", level: 2, text: "Section" },
+    ];
+
+    const container = document.createElement("div");
+    container.innerHTML = '<h1 id="title">Title</h1><h2 id="section">Section</h2>';
+    document.body.appendChild(container);
+
+    const title = document.getElementById("title")!;
+    const section = document.getElementById("section")!;
+
+    let titleTop = 200;
+    let sectionTop = 400;
+
+    vi.spyOn(container, "getBoundingClientRect").mockReturnValue({
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      width: 0,
+      height: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
+
+    vi.spyOn(title, "getBoundingClientRect").mockImplementation(() => ({
+      top: titleTop,
+      left: 0,
+      right: 0,
+      bottom: titleTop + 20,
+      width: 0,
+      height: 20,
+      x: 0,
+      y: titleTop,
+      toJSON: () => {},
+    }));
+
+    vi.spyOn(section, "getBoundingClientRect").mockImplementation(() => ({
+      top: sectionTop,
+      left: 0,
+      right: 0,
+      bottom: sectionTop + 20,
+      width: 0,
+      height: 20,
+      x: 0,
+      y: sectionTop,
+      toJSON: () => {},
+    }));
+
+    const addEventListenerSpy = vi.spyOn(container, "addEventListener");
+
+    const { result } = renderHook(() => {
+      const contentRef = useRef<HTMLDivElement | null>(container as unknown as HTMLDivElement);
+      return useOutlineSync(contentRef, headings);
+    });
+
+    expect(result.current).toBeUndefined();
+    expect(addEventListenerSpy).toHaveBeenCalledWith("scroll", expect.any(Function), { passive: true });
+
+    titleTop = 50;
+    act(() => {
+      container.dispatchEvent(new Event("scroll"));
+    });
+
+    expect(result.current).toBe("title");
+
+    titleTop = -100;
+    sectionTop = 50;
+    act(() => {
+      container.dispatchEvent(new Event("scroll"));
+    });
+
+    expect(result.current).toBe("section");
+
+    document.body.removeChild(container);
+    addEventListenerSpy.mockRestore();
+  });
 });

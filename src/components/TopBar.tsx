@@ -1,5 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { compactPath } from "../lib/path";
+import { OutlineToggle } from "./OutlineToggle";
 
 function MinimizeIcon() {
   return (
@@ -38,21 +39,30 @@ type TopBarProps = {
   fileName?: string;
   parentPath?: string;
   onOpen: () => void;
+  isOutlineOpen?: boolean;
+  onToggleOutline?: () => void;
 };
 
-export function TopBar({ fileName, parentPath, onOpen }: TopBarProps) {
+export function TopBar({
+  fileName,
+  parentPath,
+  onOpen,
+  isOutlineOpen = false,
+  onToggleOutline,
+}: TopBarProps) {
   const window = getCurrentWindow();
 
   return (
     <header className="top-bar" data-tauri-drag-region>
-      <div className="top-bar__meta" data-tauri-drag-region>
-        <div className="top-bar__title">{fileName ?? "No file open"}</div>
-        {parentPath ? <div className="top-bar__path">{compactPath(parentPath)}</div> : null}
-      </div>
-      <div className="top-bar__actions" data-tauri-drag-region="false">
+      <div className="top-bar__actions top-bar__actions--left" data-tauri-drag-region="false">
+        <OutlineToggle isOpen={isOutlineOpen} onToggle={onToggleOutline ?? (() => {})} />
         <button className="button button-secondary open-button" type="button" aria-label="Open file" onClick={onOpen}>
           <OpenIcon />
         </button>
+      </div>
+      <div className="top-bar__meta" data-tauri-drag-region>
+        <div className="top-bar__title">{fileName ?? "No file open"}</div>
+        {parentPath ? <div className="top-bar__path">{compactPath(parentPath)}</div> : null}
       </div>
       <div className="window-controls" data-tauri-drag-region="false">
         <button

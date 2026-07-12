@@ -38,4 +38,12 @@ describe("OutlinePanel", () => {
     render(<OutlinePanel headings={[]} />);
     expect(screen.getByText("本文档暂无目录")).toBeInTheDocument();
   });
+
+  it("indents h1, h2, h3 by 0, 12, 24 pixels", () => {
+    render(<OutlinePanel headings={sampleHeadings} />);
+    const items = screen.getAllByRole("button").map((button) => button.parentElement);
+    expect(items[0]).toHaveStyle({ paddingLeft: "0px" });
+    expect(items[1]).toHaveStyle({ paddingLeft: "12px" });
+    expect(items[2]).toHaveStyle({ paddingLeft: "24px" });
+  });
 });

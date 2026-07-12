@@ -4,9 +4,17 @@ import { Store } from "@tauri-apps/plugin-store";
 const STORE_KEY = "outlineOpen";
 const STORE_PATH = "settings.json";
 
+function logStoreFailure(operation: string, error: unknown) {
+  console.warn(`outlineOpen Store ${operation} failed:`, error);
+}
+
+function logPersistenceFailure(operation: string, error: unknown) {
+  console.warn(`Failed to ${operation} outlineOpen preference:`, error);
+}
+
 export function useOutlineOpen(initialOpen: boolean = false): [boolean, () => void, (open: boolean) => void] {
   const [isOpen, setIsOpen] = useState<boolean>(initialOpen);
-  const isInitialMount = useRef(true);
+  const hasInteracted = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -15,17 +23,18 @@ export function useOutlineOpen(initialOpen: boolean = false): [boolean, () => vo
       try {
         const store = await Store.load(STORE_PATH);
         const value = await store.get<boolean>(STORE_KEY);
-        if (!cancelled && value !== undefined) {
+        if (!cancelled && value !== undefined && !hasInteracted.current) {
           setIsOpen(value);
         }
-      } catch {
+      } catch (storeError) {
+        logStoreFailure("load", storeError);
         try {
           const localValue = localStorage.getItem(STORE_KEY);
-          if (!cancelled && localValue !== null) {
+          if (!cancelled && localValue !== null && !hasInteracted.current) {
             setIsOpen(localValue === "true");
           }
-        } catch {
-          // ignore persistence failures
+        } catch (localError) {
+          logPersistenceFailure("load", localError);
         }
       }
     }
@@ -38,8 +47,7 @@ export function useOutlineOpen(initialOpen: boolean = false): [boolean, () => vo
   }, []);
 
   useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
+    if (!hasInteracted.current) {
       return;
     }
 
@@ -48,11 +56,12 @@ export function useOutlineOpen(initialOpen: boolean = false): [boolean, () => vo
         const store = await Store.load(STORE_PATH);
         await store.set(STORE_KEY, isOpen);
         await store.save();
-      } catch {
+      } catch (storeError) {
+        logStoreFailure("save", storeError);
         try {
           localStorage.setItem(STORE_KEY, String(isOpen));
-        } catch {
-          // ignore persistence failures
+        } catch (localError) {
+          logPersistenceFailure("save", localError);
         }
       }
     }
@@ -60,8 +69,15 @@ export function useOutlineOpen(initialOpen: boolean = false): [boolean, () => vo
     void saveState();
   }, [isOpen]);
 
-  const toggle = useCallback(() => setIsOpen((open) => !open), []);
-  const setOpen = useCallback((open: boolean) => setIsOpen(open), []);
+  const toggle = useCallback(() => {
+    hasInteracted.current = true;
+    setIsOpen((open) => !open);
+  }, []);
+
+  const setOpen = useCallback((open: boolean) => {
+    hasInteracted.current = true;
+    setIsOpen(open);
+  }, []);
 
   return [isOpen, toggle, setOpen];
 }
