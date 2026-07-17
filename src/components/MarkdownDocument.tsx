@@ -1,4 +1,4 @@
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema, type Options as RehypeSanitizeOptions } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
@@ -11,7 +11,6 @@ import type { OutlineHeading } from "../types";
 
 type MarkdownDocumentProps = {
   markdown: string;
-  documentPath: string;
   headings?: OutlineHeading[];
 };
 
@@ -40,35 +39,32 @@ const kamiSchema: RehypeSanitizeOptions = {
     "tr",
     "td",
     "th",
-    "form",
-    "label",
+    // input 仅用于 GFM task list 的复选框；其余表单元素（form/button/select/textarea/label 等）一律不允许
     "input",
-    "select",
-    "option",
-    "optgroup",
-    "textarea",
-    "button",
   ],
   attributes: {
     ...defaultSchema.attributes,
     "*": ["className", "ariaDescribedBy", "ariaLabel", "ariaLabelledBy"],
     a: [...(defaultSchema.attributes?.a ?? []), "target", "rel"],
-    img: [...(defaultSchema.attributes?.img ?? []), "alt", "width", "height", "loading"],
+    img: [...(defaultSchema.attributes?.img ?? []), "alt", "title", "width", "height", "loading"],
     div: ["align"],
     td: ["align", "valign", "width", "height"],
     th: ["align", "valign", "width", "height"],
     table: ["width"],
     br: [],
     input: ["type", "name", "value", "checked", "disabled", "readonly", "placeholder", "required"],
-    select: ["name", "disabled", "required", "multiple", "size"],
-    option: ["value", "selected", "disabled"],
-    optgroup: ["label", "disabled"],
-    textarea: ["name", "rows", "cols", "disabled", "readonly", "placeholder", "required"],
-    button: ["type", "disabled"],
-    form: ["action", "method"],
-    label: ["for"],
+  },
+  protocols: {
+    ...defaultSchema.protocols,
+    href: [...(defaultSchema.protocols?.href ?? []), "ftp"],
   },
 };
+
+// react-markdown 的 defaultUrlTransform 会把 ftp 等未列出的协议置为空字符串；
+// 这里放行 ftp，使其 href 保留，点击时与 http(s) 一样交给系统 opener 处理
+function urlTransform(url: string) {
+  return url.startsWith("ftp:") ? url : defaultUrlTransform(url);
+}
 
 function useHeadingIdResolver(headings?: OutlineHeading[]) {
   const usedIds = useRef(new Set<string>());
@@ -121,7 +117,7 @@ function extractText(node: unknown): string {
   return "";
 }
 
-export const MarkdownDocument = memo(function MarkdownDocument({ markdown, documentPath, headings }: MarkdownDocumentProps) {
+export const MarkdownDocument = memo(function MarkdownDocument({ markdown, headings }: MarkdownDocumentProps) {
   const resolveHeadingId = useHeadingIdResolver(headings);
 
   return (
@@ -129,12 +125,15 @@ export const MarkdownDocument = memo(function MarkdownDocument({ markdown, docum
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, [rehypeSanitize, kamiSchema]]}
+        urlTransform={urlTransform}
         components={{
           h1: ({ children }) => <h1 id={resolveHeadingId(1, extractText(children))}>{children}</h1>,
           h2: ({ children }) => <h2 id={resolveHeadingId(2, extractText(children))}>{children}</h2>,
           h3: ({ children }) => <h3 id={resolveHeadingId(3, extractText(children))}>{children}</h3>,
           a: ({ href, children }) => {
-            const isExternal = href?.startsWith("http://") || href?.startsWith("https://");
+            // 带协议（http(s)、mailto、ftp 等）的链接交给系统默认程序打开；
+            // 页内锚点（#...）与相对路径保持原生行为
+            const hasProtocol = href ? /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(href) : false;
 
             function isImageElement(child: unknown): boolean {
               if (!isValidElement(child)) return false;
@@ -145,7 +144,7 @@ export const MarkdownDocument = memo(function MarkdownDocument({ markdown, docum
             const childArray = Array.isArray(children) ? children : [children];
             const isImageLink = childArray.length === 1 && isImageElement(childArray[0]);
 
-            if (isExternal) {
+            if (hasProtocol) {
               return (
                 <a
                   href={href}
@@ -163,7 +162,7 @@ export const MarkdownDocument = memo(function MarkdownDocument({ markdown, docum
             }
             return <a href={href}>{children}</a>;
           },
-          img: ({ src, alt }) => <MarkdownImage src={src} alt={alt} documentPath={documentPath} />,
+          img: ({ src, alt, title }) => <MarkdownImage src={src} alt={alt} title={title} />,
           pre: ({ children }) => {
             const childArray = Array.isArray(children) ? children : [children];
             const nonWhitespaceChildren = childArray.filter((child) => {
@@ -194,7 +193,7 @@ export const MarkdownDocument = memo(function MarkdownDocument({ markdown, docum
             }
             return <pre>{children}</pre>;
           },
-          code: ({ className, children, ...props }) => {
+          code: ({ node: _node, className, children, ...props }) => {
             return (
               <code className={className} {...props}>
                 {children}

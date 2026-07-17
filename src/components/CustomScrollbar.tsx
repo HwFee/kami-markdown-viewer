@@ -15,6 +15,7 @@ export function CustomScrollbar({ containerRef, contentRef }: CustomScrollbarPro
   const draggingRef = useRef(false);
   const dragStartYRef = useRef(0);
   const dragStartScrollTopRef = useRef(0);
+  const dragCleanupRef = useRef<(() => void) | null>(null);
 
   function show() {
     setVisible(true);
@@ -44,6 +45,8 @@ export function CustomScrollbar({ containerRef, contentRef }: CustomScrollbarPro
     const container = containerRef.current;
     const content = contentRef?.current;
     if (!container) return;
+
+    let mounted = true;
 
     function handleScroll() {
       updateThumb();
@@ -101,20 +104,27 @@ export function CustomScrollbar({ containerRef, contentRef }: CustomScrollbarPro
     }
 
     requestAnimationFrame(() => {
-      requestAnimationFrame(initialShow);
+      requestAnimationFrame(() => {
+        if (mounted) initialShow();
+      });
     });
 
     if (document.fonts) {
-      document.fonts.ready.then(initialShow);
+      void document.fonts.ready.then(() => {
+        if (mounted) initialShow();
+      });
     }
 
     return () => {
+      mounted = false;
       container.removeEventListener("scroll", handleScroll);
       container.removeEventListener("mouseenter", handleMouseEnter);
       container.removeEventListener("mouseleave", handleMouseLeave);
       document.removeEventListener("mousemove", handleMouseMove);
       resizeObserver.disconnect();
       window.clearTimeout(hideTimeoutRef.current);
+      // 拖拽过程中卸载时移除 document 级拖拽监听，避免泄漏
+      dragCleanupRef.current?.();
     };
   }, [containerRef, contentRef]);
 
@@ -145,12 +155,18 @@ export function CustomScrollbar({ containerRef, contentRef }: CustomScrollbarPro
     function handleMouseUp() {
       draggingRef.current = false;
       setVisible(false);
+      removeDragListeners();
+    }
+
+    function removeDragListeners() {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
+      dragCleanupRef.current = null;
     }
 
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
+    dragCleanupRef.current = removeDragListeners;
   }
 
   function handleTrackClick(event: React.MouseEvent) {

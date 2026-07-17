@@ -18,7 +18,7 @@ export function OutlineToggle({ isOpen, onToggle }: OutlineToggleProps) {
     <button
       type="button"
       className="outline-toggle"
-      aria-label="Toggle outline"
+      aria-label="切换大纲"
       aria-pressed={isOpen}
       onClick={onToggle}
     >

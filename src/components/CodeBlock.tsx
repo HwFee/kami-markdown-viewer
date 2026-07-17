@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { PrismAsyncLight as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 type CodeBlockProps = {
@@ -11,6 +11,29 @@ type CopyStatus = "idle" | "copied" | "error";
 
 const COPY_TIMEOUT_MS = 1500;
 const ERROR_TIMEOUT_MS = 1500;
+
+// 按需加载的语言表只包含 refractor 规范名（如 typescript），
+// 把 Markdown 代码围栏里的常见别名映射过去，保证 ts/js 等仍能高亮
+const LANGUAGE_ALIASES: Record<string, string> = {
+  js: "javascript",
+  ts: "typescript",
+  py: "python",
+  rb: "ruby",
+  rs: "rust",
+  sh: "bash",
+  shell: "bash",
+  yml: "yaml",
+  md: "markdown",
+  html: "markup",
+  xml: "markup",
+  cs: "csharp",
+  kt: "kotlin",
+};
+
+function resolveHighlightLanguage(language?: string): string {
+  if (!language) return "text";
+  return LANGUAGE_ALIASES[language] ?? language;
+}
 
 export function CodeBlock({ code, language }: CodeBlockProps) {
   const [status, setStatus] = useState<CopyStatus>("idle");
@@ -91,7 +114,7 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
       </div>
       <div className="code-block__body">
         <SyntaxHighlighter
-          language={language || "text"}
+          language={resolveHighlightLanguage(language)}
           style={oneLight}
           PreTag="pre"
           customStyle={{

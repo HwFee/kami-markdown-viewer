@@ -6,7 +6,7 @@ describe("OutlineToggle", () => {
   it("calls onToggle when clicked", () => {
     const handleToggle = vi.fn();
     render(<OutlineToggle isOpen={false} onToggle={handleToggle} />);
-    fireEvent.click(screen.getByRole("button", { name: "Toggle outline" }));
+    fireEvent.click(screen.getByRole("button", { name: "切换大纲" }));
     expect(handleToggle).toHaveBeenCalledTimes(1);
   });
 });

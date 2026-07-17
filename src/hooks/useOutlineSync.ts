@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { OutlineHeading } from "../types";
 
 export function useOutlineSync(
-  contentRef: React.RefObject<HTMLElement | null>,
+  scrollContainerRef: React.RefObject<HTMLElement | null>,
   headings: OutlineHeading[]
 ): string | undefined {
   const [activeHeadingId, setActiveHeadingId] = useState<string | undefined>(undefined);
@@ -11,7 +11,7 @@ export function useOutlineSync(
   activeRef.current = activeHeadingId;
 
   useEffect(() => {
-    if (!contentRef.current) return;
+    if (!scrollContainerRef.current) return;
 
     if (headings.length === 0) {
       if (activeRef.current !== undefined) {
@@ -20,7 +20,7 @@ export function useOutlineSync(
       return;
     }
 
-    const container = contentRef.current;
+    const container = scrollContainerRef.current;
     const headingIds = headings.map((h) => h.id);
 
     const updateActive = () => {
@@ -79,7 +79,7 @@ export function useOutlineSync(
     return () => {
       container.removeEventListener("scroll", handleScroll);
     };
-  }, [contentRef, headingIdsKey]);
+  }, [scrollContainerRef, headingIdsKey]);
 
   return activeHeadingId;
 }

@@ -29,5 +29,10 @@ Thumbs.db
 # Test coverage
 coverage/
 
+# tsc -b artifacts (emitted vite.config.js would shadow vite.config.ts)
+*.tsbuildinfo
+/vite.config.js
+/vite.config.d.ts
+
 # Windows reserved-name artifacts that break Git on Windows
 nul

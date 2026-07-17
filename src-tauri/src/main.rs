@@ -1,28 +1,17 @@
-#![cfg_attr(not(test), windows_subsystem = "windows")]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use kami_markdown_viewer_lib::document::{self, LoadedDocument};
 use serde_json::json;
 use tauri::{Emitter, Manager};
 
-#[cfg(windows)]
-mod webview_scrollbar {
-    use webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_SCROLLBAR_STYLE_DEFAULT;
-    use webview2_com::CoreWebView2EnvironmentOptions;
-
-    pub fn create_environment_options_with_classic_scrollbar() {
-        let options = CoreWebView2EnvironmentOptions::default();
-        unsafe {
-            options.set_scroll_bar_style(COREWEBVIEW2_SCROLLBAR_STYLE_DEFAULT);
-        }
-    }
-}
-
 fn first_markdown_arg() -> Option<String> {
-    std::env::args().skip(1).find(|arg| {
+    std::env::args_os().skip(1).find_map(|arg| {
+        let arg = arg.to_str()?;
         let lower = arg.to_ascii_lowercase();
-        lower.ends_with(".md") || lower.ends_with(".markdown")
+        (lower.ends_with(".md") || lower.ends_with(".markdown")).then(|| arg.to_string())
     })
 }
 
@@ -31,26 +20,51 @@ struct StartupState {
     path: Option<String>,
 }
 
+/// Canonicalized path of the currently loaded Markdown document. It is the
+/// only trusted anchor for resolving local asset paths, so the frontend can
+/// never steer file reads outside the open document's directory.
+#[derive(Debug, Default)]
+struct AppState(Mutex<Option<PathBuf>>);
+
 #[tauri::command]
 fn get_startup_path(state: tauri::State<StartupState>) -> Option<String> {
     state.path.clone()
 }
 
 #[tauri::command]
-fn load_document(path: String) -> Result<LoadedDocument, String> {
-    document::load_markdown_file(Path::new(&path))
+async fn load_document(
+    path: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<LoadedDocument, String> {
+    let doc = document::load_markdown_file(Path::new(&path))?;
+    let mut current = state
+        .0
+        .lock()
+        .map_err(|_| "Document state lock poisoned".to_string())?;
+    *current = Some(PathBuf::from(&doc.path));
+    Ok(doc)
 }
 
 #[tauri::command]
-fn resolve_asset(document_path: String, asset_src: String) -> Result<String, String> {
-    document::resolve_asset_to_data_url(Path::new(&document_path), &asset_src)
+async fn resolve_asset(
+    state: tauri::State<'_, AppState>,
+    asset_src: String,
+) -> Result<String, String> {
+    let anchor_dir = {
+        let current = state
+            .0
+            .lock()
+            .map_err(|_| "Document state lock poisoned".to_string())?;
+        current
+            .as_ref()
+            .and_then(|path| path.parent().map(|parent| parent.to_path_buf()))
+            .ok_or_else(|| "No document is loaded".to_string())?
+    };
+    document::resolve_asset_to_data_url(&anchor_dir, &asset_src)
 }
 
 fn main() {
     let startup_path = first_markdown_arg();
-
-    #[cfg(windows)]
-    webview_scrollbar::create_environment_options_with_classic_scrollbar();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -59,6 +73,7 @@ fn main() {
         .manage(StartupState {
             path: startup_path.clone(),
         })
+        .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             load_document,
             resolve_asset,

@@ -4,12 +4,12 @@ type EmptyStateProps = {
 
 export function EmptyState({ onOpen }: EmptyStateProps) {
   return (
-    <section aria-label="empty document" className="empty-state">
-      <div className="empty-eyebrow">Markdown Viewer</div>
+    <section aria-label="空文档" className="empty-state">
+      <div className="empty-eyebrow">Markdown 查看器</div>
       <h1>Kami Markdown Viewer</h1>
-      <p>Open a Markdown file to begin.</p>
+      <p>打开 Markdown 文件开始查看。</p>
       <button className="button button-primary" type="button" onClick={onOpen}>
-        Open Markdown
+        打开 Markdown 文件
       </button>
     </section>
   );

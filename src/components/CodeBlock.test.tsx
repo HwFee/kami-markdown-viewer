@@ -41,7 +41,8 @@ describe("CodeBlock", () => {
     expect(pres).toHaveLength(1);
     const code = pres[0].querySelector(":scope > code");
     expect(code).toBeInTheDocument();
-    expect(code).toHaveClass("language-ts");
+    // ts 是常见别名，会映射到按需加载的规范名 typescript
+    expect(code).toHaveClass("language-typescript");
   });
 
   it("copies the exact raw code string on click", async () => {

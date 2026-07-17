@@ -4,14 +4,14 @@ import { useEffect, useState } from "react";
 type MarkdownImageProps = {
   src?: string;
   alt?: string;
-  documentPath: string;
+  title?: string;
 };
 
 function isRemote(src: string) {
   return src.startsWith("http://") || src.startsWith("https://") || src.startsWith("data:");
 }
 
-export function MarkdownImage({ src, alt = "", documentPath }: MarkdownImageProps) {
+export function MarkdownImage({ src, alt = "", title }: MarkdownImageProps) {
   const [resolvedSrc, setResolvedSrc] = useState(() => (src && isRemote(src) ? src : ""));
   const [error, setError] = useState<string | null>(null);
 
@@ -32,10 +32,7 @@ export function MarkdownImage({ src, alt = "", documentPath }: MarkdownImageProp
       setResolvedSrc("");
 
       try {
-        const resolved = await invoke<string>("resolve_asset", {
-          documentPath,
-          assetSrc: src,
-        });
+        const resolved = await invoke<string>("resolve_asset", { assetSrc: src });
         if (!cancelled) setResolvedSrc(resolved);
       } catch (resolveError) {
         if (!cancelled) setError(String(resolveError));
@@ -47,7 +44,7 @@ export function MarkdownImage({ src, alt = "", documentPath }: MarkdownImageProp
     return () => {
       cancelled = true;
     };
-  }, [documentPath, src]);
+  }, [src]);
 
   if (!src) return null;
 
@@ -63,5 +60,5 @@ export function MarkdownImage({ src, alt = "", documentPath }: MarkdownImageProp
     return <span className="asset-placeholder">{alt}</span>;
   }
 
-  return <img src={resolvedSrc} alt={alt} loading="lazy" />;
+  return <img src={resolvedSrc} alt={alt} title={title} loading="lazy" />;
 }

@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::Serialize;
 
+const MAX_FILE_SIZE_BYTES: u64 = 50 * 1024 * 1024;
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoadedDocument {
@@ -10,6 +12,14 @@ pub struct LoadedDocument {
     pub file_name: String,
     pub parent_path: String,
     pub markdown: String,
+}
+
+/// Result of resolving an asset source: either a local file to inline, or a
+/// remote/data URL the webview can load directly.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AssetRef {
+    Local(PathBuf),
+    Remote(String),
 }
 
 fn is_markdown_extension(path: &Path) -> bool {
@@ -40,6 +50,16 @@ fn mime_type_for_path(path: &Path) -> &'static str {
     }
 }
 
+fn check_file_size(path: &Path) -> Result<(), String> {
+    let size = std::fs::metadata(path)
+        .map_err(|error| format!("Cannot read file metadata: {error}"))?
+        .len();
+    if size > MAX_FILE_SIZE_BYTES {
+        return Err(format!("file too large: {size} bytes (max 50 MB)"));
+    }
+    Ok(())
+}
+
 pub fn load_markdown_file(path: &Path) -> Result<LoadedDocument, String> {
     let canonical =
         dunce::canonicalize(path).map_err(|error| format!("Cannot open file: {error}"))?;
@@ -51,6 +71,8 @@ pub fn load_markdown_file(path: &Path) -> Result<LoadedDocument, String> {
     if !is_markdown_extension(&canonical) {
         return Err(format!("Not a Markdown file: {}", canonical.display()));
     }
+
+    check_file_size(&canonical)?;
 
     let markdown = std::fs::read_to_string(&canonical)
         .map_err(|error| format!("Cannot read UTF-8 Markdown: {error}"))?;
@@ -74,9 +96,16 @@ pub fn load_markdown_file(path: &Path) -> Result<LoadedDocument, String> {
     })
 }
 
-pub fn resolve_local_asset_path(document_path: &Path, asset_src: &str) -> Result<PathBuf, String> {
-    if asset_src.starts_with("http://") || asset_src.starts_with("https://") {
-        return Ok(PathBuf::from(asset_src));
+/// Resolve an asset source against the directory that anchors local paths
+/// (the loaded document's parent directory). `http:`, `https:` and `data:`
+/// sources are classified as `Remote`; everything else must stay inside the
+/// anchor directory.
+pub fn resolve_local_asset_path(anchor_dir: &Path, asset_src: &str) -> Result<AssetRef, String> {
+    if asset_src.starts_with("http://")
+        || asset_src.starts_with("https://")
+        || asset_src.starts_with("data:")
+    {
+        return Ok(AssetRef::Remote(asset_src.to_string()));
     }
 
     let decoded = urlencoding::decode(asset_src)
@@ -84,43 +113,39 @@ pub fn resolve_local_asset_path(document_path: &Path, asset_src: &str) -> Result
         .replace('\\', "/");
 
     let asset_path = PathBuf::from(decoded);
-    let document_dir = document_path
-        .parent()
-        .ok_or_else(|| "Markdown file has no parent directory".to_string())?;
 
     let candidate = if asset_path.is_absolute() {
         asset_path
     } else {
-        document_dir.join(asset_path)
+        anchor_dir.join(asset_path)
     };
 
     let canonical_candidate =
         dunce::canonicalize(candidate).map_err(|error| format!("Cannot resolve asset: {error}"))?;
 
-    let canonical_document_dir = dunce::canonicalize(document_dir)
-        .map_err(|error| format!("Cannot canonicalize document directory: {error}"))?;
+    let canonical_anchor_dir = dunce::canonicalize(anchor_dir)
+        .map_err(|error| format!("Cannot canonicalize anchor directory: {error}"))?;
 
-    if !canonical_candidate.starts_with(&canonical_document_dir) {
+    if !canonical_candidate.starts_with(&canonical_anchor_dir) {
         return Err(format!(
             "Asset path escapes the Markdown directory: {}",
             canonical_candidate.display()
         ));
     }
 
-    Ok(canonical_candidate)
+    Ok(AssetRef::Local(canonical_candidate))
 }
 
-pub fn resolve_asset_to_data_url(document_path: &Path, asset_src: &str) -> Result<String, String> {
-    if asset_src.starts_with("http://")
-        || asset_src.starts_with("https://")
-        || asset_src.starts_with("data:")
-    {
-        return Ok(asset_src.to_string());
+pub fn resolve_asset_to_data_url(anchor_dir: &Path, asset_src: &str) -> Result<String, String> {
+    match resolve_local_asset_path(anchor_dir, asset_src)? {
+        AssetRef::Remote(url) => Ok(url),
+        AssetRef::Local(path) => {
+            check_file_size(&path)?;
+            let bytes =
+                std::fs::read(&path).map_err(|error| format!("Cannot read asset: {error}"))?;
+            let mime = mime_type_for_path(&path);
+            let encoded = STANDARD.encode(&bytes);
+            Ok(format!("data:{mime};base64,{encoded}"))
+        }
     }
-
-    let path = resolve_local_asset_path(document_path, asset_src)?;
-    let bytes = std::fs::read(&path).map_err(|error| format!("Cannot read asset: {error}"))?;
-    let mime = mime_type_for_path(&path);
-    let encoded = STANDARD.encode(&bytes);
-    Ok(format!("data:{mime};base64,{encoded}"))
 }

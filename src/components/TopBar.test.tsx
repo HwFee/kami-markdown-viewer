@@ -14,15 +14,15 @@ describe("TopBar", () => {
   it("renders the outline toggle and open button", () => {
     render(<TopBar onOpen={vi.fn()} isOutlineOpen={false} onToggleOutline={vi.fn()} />);
 
-    expect(screen.getByRole("button", { name: "Toggle outline" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open file" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "切换大纲" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开文件" })).toBeInTheDocument();
   });
 
   it("calls onToggleOutline when the outline toggle is clicked", () => {
     const handleToggle = vi.fn();
     render(<TopBar onOpen={vi.fn()} isOutlineOpen={false} onToggleOutline={handleToggle} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Toggle outline" }));
+    fireEvent.click(screen.getByRole("button", { name: "切换大纲" }));
     expect(handleToggle).toHaveBeenCalledTimes(1);
   });
 });

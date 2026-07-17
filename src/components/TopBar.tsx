@@ -56,19 +56,19 @@ export function TopBar({
     <header className="top-bar" data-tauri-drag-region>
       <div className="top-bar__actions top-bar__actions--left" data-tauri-drag-region="false">
         <OutlineToggle isOpen={isOutlineOpen} onToggle={onToggleOutline ?? (() => {})} />
-        <button className="button button-secondary open-button" type="button" aria-label="Open file" onClick={onOpen}>
+        <button className="button button-secondary open-button" type="button" aria-label="打开文件" onClick={onOpen}>
           <OpenIcon />
         </button>
       </div>
       <div className="top-bar__meta" data-tauri-drag-region>
-        <div className="top-bar__title">{fileName ?? "No file open"}</div>
+        <div className="top-bar__title">{fileName ?? "未打开文件"}</div>
         {parentPath ? <div className="top-bar__path">{compactPath(parentPath)}</div> : null}
       </div>
       <div className="window-controls" data-tauri-drag-region="false">
         <button
           className="window-control"
           type="button"
-          aria-label="Minimize"
+          aria-label="最小化"
           onClick={(event) => {
             event.stopPropagation();
             void window.minimize();
@@ -79,7 +79,7 @@ export function TopBar({
         <button
           className="window-control"
           type="button"
-          aria-label="Maximize"
+          aria-label="最大化"
           onClick={(event) => {
             event.stopPropagation();
             void window.toggleMaximize();
@@ -90,7 +90,7 @@ export function TopBar({
         <button
           className="window-control window-control--close"
           type="button"
-          aria-label="Close"
+          aria-label="关闭"
           onClick={(event) => {
             event.stopPropagation();
             void window.close();

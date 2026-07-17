@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "./App";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -48,7 +48,7 @@ async function loadDocument() {
   vi.mocked(open).mockResolvedValueOnce("C:/notes/readme.md");
 
   render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: "Open file" }));
+  fireEvent.click(screen.getByRole("button", { name: "打开文件" }));
 
   await waitFor(() => {
     expect(screen.getByRole("heading", { name: "Intro" })).toBeInTheDocument();
@@ -67,13 +67,13 @@ afterEach(() => {
 test("renders the empty viewer state", () => {
   render(<App />);
   expect(screen.getByRole("heading", { name: "Kami Markdown Viewer" })).toBeInTheDocument();
-  expect(screen.getByText("Open a Markdown file to begin.")).toBeInTheDocument();
+  expect(screen.getByText("打开 Markdown 文件开始查看。")).toBeInTheDocument();
 });
 
 test("renders the top bar", () => {
   render(<App />);
-  expect(screen.getByText("No file open")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Open file" })).toBeInTheDocument();
+  expect(screen.getByText("未打开文件")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "打开文件" })).toBeInTheDocument();
 });
 
 test("loads a selected Markdown file", async () => {
@@ -87,7 +87,7 @@ test("loads a selected Markdown file", async () => {
   });
 
   render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: "Open file" }));
+  fireEvent.click(screen.getByRole("button", { name: "打开文件" }));
 
   await waitFor(() => {
     expect(invoke).toHaveBeenCalledWith("load_document", { path: "C:/notes/readme.md" });
@@ -102,7 +102,7 @@ test("renders a file load error", async () => {
   vi.mocked(invoke).mockRejectedValueOnce("Cannot open file");
 
   render(<App />);
-  fireEvent.click(screen.getByRole("button", { name: "Open file" }));
+  fireEvent.click(screen.getByRole("button", { name: "打开文件" }));
 
   expect(await screen.findByRole("alert")).toHaveTextContent("Cannot open file");
   expect(screen.getByText("C:/notes/missing.md")).toBeInTheDocument();
@@ -125,6 +125,82 @@ test("loads startup Markdown file from backend state", async () => {
   await waitFor(() => expect(screen.getByRole("heading", { name: "Startup" })).toBeInTheDocument());
 });
 
+test("resets the scroll position when a different document is opened", async () => {
+  vi.mocked(open).mockResolvedValueOnce("C:/notes/a.md");
+  vi.mocked(invoke).mockResolvedValueOnce(null);
+  vi.mocked(invoke).mockResolvedValueOnce({
+    path: "C:/notes/a.md",
+    fileName: "a.md",
+    parentPath: "C:/notes",
+    markdown: "# DocA",
+  });
+
+  render(<App />);
+  fireEvent.click(screen.getByRole("button", { name: "打开文件" }));
+  await waitFor(() => expect(screen.getByRole("heading", { name: "DocA" })).toBeInTheDocument());
+
+  const scrollContainer = document.querySelector(".document-scroll") as HTMLElement;
+  let scrollTop = 120;
+  Object.defineProperty(scrollContainer, "scrollTop", {
+    configurable: true,
+    get: () => scrollTop,
+    set: (value: number) => {
+      scrollTop = value;
+    },
+  });
+  expect(scrollContainer.scrollTop).toBe(120);
+
+  vi.mocked(open).mockResolvedValueOnce("C:/notes/b.md");
+  vi.mocked(invoke).mockResolvedValueOnce({
+    path: "C:/notes/b.md",
+    fileName: "b.md",
+    parentPath: "C:/notes",
+    markdown: "# DocB",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "打开文件" }));
+
+  await waitFor(() => expect(screen.getByRole("heading", { name: "DocB" })).toBeInTheDocument());
+  expect(scrollContainer.scrollTop).toBe(0);
+});
+
+test("ignores a stale load response when a newer file was opened", async () => {
+  let resolveFirst: (document: unknown) => void = () => {};
+  const firstPromise = new Promise<unknown>((resolve) => {
+    resolveFirst = resolve;
+  });
+
+  vi.mocked(open).mockResolvedValueOnce("C:/notes/a.md");
+  vi.mocked(invoke).mockResolvedValueOnce(null);
+  vi.mocked(invoke).mockReturnValueOnce(firstPromise);
+
+  render(<App />);
+  fireEvent.click(screen.getByRole("button", { name: "打开文件" }));
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("load_document", { path: "C:/notes/a.md" }));
+
+  vi.mocked(open).mockResolvedValueOnce("C:/notes/b.md");
+  vi.mocked(invoke).mockResolvedValueOnce({
+    path: "C:/notes/b.md",
+    fileName: "b.md",
+    parentPath: "C:/notes",
+    markdown: "# DocB",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "打开文件" }));
+  await waitFor(() => expect(screen.getByRole("heading", { name: "DocB" })).toBeInTheDocument());
+
+  // 先发起的慢响应最后才返回，不应覆盖新文档
+  await act(async () => {
+    resolveFirst({
+      path: "C:/notes/a.md",
+      fileName: "a.md",
+      parentPath: "C:/notes",
+      markdown: "# DocA",
+    });
+  });
+
+  expect(screen.getByRole("heading", { name: "DocB" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "DocA" })).not.toBeInTheDocument();
+});
+
 describe("App outline integration", () => {
   beforeEach(() => {
     vi.mocked(invoke).mockClear();
@@ -134,7 +210,7 @@ describe("App outline integration", () => {
   it("opens the outline panel when the toggle is clicked", async () => {
     await loadDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Toggle outline" }));
+    fireEvent.click(screen.getByRole("button", { name: "切换大纲" }));
 
     expect(document.querySelector(".outline-sidebar--open")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Intro" })).toBeInTheDocument();
@@ -150,17 +226,17 @@ describe("App outline integration", () => {
     vi.mocked(open).mockResolvedValueOnce("C:/notes/plain.md");
 
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: "Open file" }));
+    fireEvent.click(screen.getByRole("button", { name: "打开文件" }));
 
     await waitFor(() => expect(screen.getByText("Just plain text.")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Toggle outline" }));
+    fireEvent.click(screen.getByRole("button", { name: "切换大纲" }));
 
     expect(screen.getByText("本文档暂无目录")).toBeInTheDocument();
   });
 
   it("scrolls to the heading when an outline item is clicked", async () => {
     await loadDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Toggle outline" }));
+    fireEvent.click(screen.getByRole("button", { name: "切换大纲" }));
 
     const section = document.getElementById("section")!;
     const scrollIntoView = vi.spyOn(section, "scrollIntoView");
@@ -174,7 +250,7 @@ describe("App outline integration", () => {
     window.innerWidth = 500;
 
     await loadDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Toggle outline" }));
+    fireEvent.click(screen.getByRole("button", { name: "切换大纲" }));
     expect(document.querySelector(".outline-sidebar--open")).toBeInTheDocument();
 
     const intro = document.getElementById("intro")!;
@@ -183,14 +259,14 @@ describe("App outline integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Intro" }));
 
     await waitFor(() => expect(document.querySelector(".outline-sidebar--open")).not.toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Toggle outline" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "切换大纲" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("renders the outline scrim when open on narrow windows", async () => {
     window.innerWidth = 500;
 
     await loadDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Toggle outline" }));
+    fireEvent.click(screen.getByRole("button", { name: "切换大纲" }));
 
     expect(document.querySelector(".outline-scrim")).toBeInTheDocument();
   });
@@ -199,7 +275,7 @@ describe("App outline integration", () => {
     window.innerWidth = 500;
 
     await loadDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Toggle outline" }));
+    fireEvent.click(screen.getByRole("button", { name: "切换大纲" }));
 
     const scrim = document.querySelector(".outline-scrim");
     expect(scrim).toBeInTheDocument();
@@ -208,9 +284,21 @@ describe("App outline integration", () => {
     await waitFor(() => expect(document.querySelector(".outline-sidebar--open")).not.toBeInTheDocument());
   });
 
+  it("closes the outline with Escape on narrow windows", async () => {
+    window.innerWidth = 500;
+
+    await loadDocument();
+    fireEvent.click(screen.getByRole("button", { name: "切换大纲" }));
+    expect(document.querySelector(".outline-sidebar--open")).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    await waitFor(() => expect(document.querySelector(".outline-sidebar--open")).not.toBeInTheDocument());
+  });
+
   it("adds the outline-open layout class to the body", async () => {
     await loadDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Toggle outline" }));
+    fireEvent.click(screen.getByRole("button", { name: "切换大纲" }));
 
     expect(document.querySelector(".app-shell__body--outline-open")).toBeInTheDocument();
   });
@@ -224,10 +312,10 @@ describe("App outline integration", () => {
     vi.mocked(open).mockResolvedValueOnce("C:/notes/readme.md");
 
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: "Open file" }));
+    fireEvent.click(screen.getByRole("button", { name: "打开文件" }));
 
     const imageBeforeToggle = await screen.findByRole("img", { name: "Preview" });
-    fireEvent.click(screen.getByRole("button", { name: "Toggle outline" }));
+    fireEvent.click(screen.getByRole("button", { name: "切换大纲" }));
 
     expect(screen.getByRole("img", { name: "Preview" })).toBe(imageBeforeToggle);
   });
