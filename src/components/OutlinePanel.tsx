@@ -1,3 +1,4 @@
+import { buildOutlineTree, type OutlineNode } from "../lib/outline";
 import type { OutlineHeading } from "../types";
 
 type OutlinePanelProps = {
@@ -5,6 +6,40 @@ type OutlinePanelProps = {
   activeHeadingId?: string;
   onSelectHeading?: (id: string) => void;
 };
+
+function OutlineItems({
+  nodes,
+  activeHeadingId,
+  onSelectHeading,
+}: {
+  nodes: OutlineNode[];
+  activeHeadingId?: string;
+  onSelectHeading?: (id: string) => void;
+}) {
+  return (
+    <ul className="outline-panel__list">
+      {nodes.map((node) => (
+        <li key={node.id} className="outline-panel__item">
+          <button
+            type="button"
+            className={`outline-panel__link ${node.id === activeHeadingId ? "outline-panel__link--active" : ""}`}
+            title={node.text || undefined}
+            onClick={() => onSelectHeading?.(node.id)}
+          >
+            {node.text || "\u00A0"}
+          </button>
+          {node.children.length > 0 ? (
+            <OutlineItems
+              nodes={node.children}
+              activeHeadingId={activeHeadingId}
+              onSelectHeading={onSelectHeading}
+            />
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export function OutlinePanel({ headings, activeHeadingId, onSelectHeading }: OutlinePanelProps) {
   if (headings.length === 0) {
@@ -18,24 +53,11 @@ export function OutlinePanel({ headings, activeHeadingId, onSelectHeading }: Out
   return (
     <nav className="outline-panel" aria-label="文档大纲">
       <div className="outline-panel__header">大纲</div>
-      <ul className="outline-panel__list">
-        {headings.map((heading) => (
-          <li
-            key={heading.id}
-            className="outline-panel__item"
-            style={{ paddingLeft: `${(heading.level - 1) * 12}px` }}
-          >
-            <button
-              type="button"
-              className={`outline-panel__link ${heading.id === activeHeadingId ? "outline-panel__link--active" : ""}`}
-              title={heading.text || undefined}
-              onClick={() => onSelectHeading?.(heading.id)}
-            >
-              {heading.text || "\u00A0"}
-            </button>
-          </li>
-        ))}
-      </ul>
+      <OutlineItems
+        nodes={buildOutlineTree(headings)}
+        activeHeadingId={activeHeadingId}
+        onSelectHeading={onSelectHeading}
+      />
     </nav>
   );
 }

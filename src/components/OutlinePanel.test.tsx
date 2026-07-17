@@ -39,11 +39,22 @@ describe("OutlinePanel", () => {
     expect(screen.getByText("本文档暂无目录")).toBeInTheDocument();
   });
 
-  it("indents h1, h2, h3 by 0, 12, 24 pixels", () => {
+  it("nests lower-level headings inside their parent's item", () => {
     render(<OutlinePanel headings={sampleHeadings} />);
-    const items = screen.getAllByRole("button").map((button) => button.parentElement);
-    expect(items[0]).toHaveStyle({ paddingLeft: "0px" });
-    expect(items[1]).toHaveStyle({ paddingLeft: "12px" });
-    expect(items[2]).toHaveStyle({ paddingLeft: "24px" });
+
+    const sectionA = screen.getByRole("button", { name: "Section A" });
+    const subsection = screen.getByRole("button", { name: "Subsection" });
+
+    const nestedList = subsection.closest("ul");
+    expect(nestedList?.parentElement?.tagName).toBe("LI");
+    expect(nestedList?.parentElement).toContainElement(sectionA);
+  });
+
+  it("does not indent items with inline padding", () => {
+    render(<OutlinePanel headings={sampleHeadings} />);
+    for (const button of screen.getAllByRole("button")) {
+      expect(button.parentElement).not.toHaveStyle({ paddingLeft: "12px" });
+      expect(button.parentElement).not.toHaveStyle({ paddingLeft: "24px" });
+    }
   });
 });
