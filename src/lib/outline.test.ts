@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractOutline, slugify } from "./outline";
+import { buildOutlineTree, extractOutline, slugify } from "./outline";
 
 describe("extractOutline", () => {
   it("extracts h1, h2, h3 in order", () => {
@@ -160,5 +160,41 @@ describe("slugify", () => {
 
   it("keeps Chinese characters", () => {
     expect(slugify("第一章")).toBe("第一章");
+  });
+});
+
+describe("buildOutlineTree", () => {
+  it("nests lower levels under the nearest higher-level heading", () => {
+    const tree = buildOutlineTree([
+      { id: "a", level: 1, text: "A" },
+      { id: "b", level: 2, text: "B" },
+      { id: "c", level: 3, text: "C" },
+      { id: "d", level: 2, text: "D" },
+      { id: "e", level: 1, text: "E" },
+    ]);
+    expect(tree).toEqual([
+      {
+        id: "a", level: 1, text: "A",
+        children: [
+          { id: "b", level: 2, text: "B", children: [{ id: "c", level: 3, text: "C", children: [] }] },
+          { id: "d", level: 2, text: "D", children: [] },
+        ],
+      },
+      { id: "e", level: 1, text: "E", children: [] },
+    ]);
+  });
+
+  it("keeps a first h2/h3 as a root when no h1 precedes it", () => {
+    const tree = buildOutlineTree([
+      { id: "b", level: 2, text: "B" },
+      { id: "c", level: 3, text: "C" },
+    ]);
+    expect(tree).toEqual([
+      { id: "b", level: 2, text: "B", children: [{ id: "c", level: 3, text: "C", children: [] }] },
+    ]);
+  });
+
+  it("returns an empty array for no headings", () => {
+    expect(buildOutlineTree([])).toEqual([]);
   });
 });
