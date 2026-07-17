@@ -56,7 +56,7 @@ export function TopBar({
     <header className="top-bar" data-tauri-drag-region>
       <div className="top-bar__actions top-bar__actions--left" data-tauri-drag-region="false">
         <OutlineToggle isOpen={isOutlineOpen} onToggle={onToggleOutline ?? (() => {})} />
-        <button className="button button-secondary open-button" type="button" aria-label="打开文件" onClick={onOpen}>
+        <button className="open-button" type="button" aria-label="打开文件" onClick={onOpen}>
           <OpenIcon />
         </button>
       </div>

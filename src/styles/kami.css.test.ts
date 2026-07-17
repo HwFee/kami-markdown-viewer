@@ -124,3 +124,24 @@ describe("kami.css outline reduced motion", () => {
     expect(reducedMotionRuleIndex).toBeGreaterThan(baseRuleIndex);
   });
 });
+
+describe("kami.css top bar", () => {
+  it("shows the file path inline instead of hiding it", () => {
+    const rule = css.match(/\.top-bar__path\s*\{[^}]*\}/s)?.[0] ?? "";
+    expect(rule).not.toMatch(/display:\s*none/);
+    expect(rule).toMatch(/font-size:\s*11px/);
+  });
+
+  it("lays out the meta line as a single baseline-aligned row", () => {
+    const rule = css.match(/\.top-bar__meta\s*\{[^}]*\}/s)?.[0] ?? "";
+    expect(rule).toMatch(/display:\s*flex/);
+    expect(rule).toMatch(/align-items:\s*baseline/);
+  });
+
+  it("shares one ghost style between outline toggle and open button", () => {
+    const rule = css.match(/\.outline-toggle,\s*\.open-button\s*\{[^}]*\}/s)?.[0] ?? "";
+    expect(rule).toMatch(/width:\s*26px/);
+    expect(rule).toMatch(/height:\s*26px/);
+    expect(rule).toMatch(/box-shadow:\s*inset 0 0 0 1px var\(--hairline\)/);
+  });
+});
