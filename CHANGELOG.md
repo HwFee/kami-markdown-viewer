@@ -4,6 +4,19 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.3] - 2026-07-17
+
+### 变更
+
+- 大纲侧边栏重新设计：由悬浮卡片改为无框嵌入栏——贴边全高、与正文同一纸面，仅以发丝线分隔；层级以细竖线引导，当前标题改为墨色加句读墨点标记
+- 顶栏视觉统一：大纲开关与打开文件组成左侧 ghost 图标工具簇，标题与路径改为单行排布并显示文件所在路径
+- 大纲条目补充键盘焦点环样式
+
+### 测试
+
+- 大纲改以嵌套树渲染，新增树构建（含 h1→h3 跳级）与嵌套结构用例
+- 修复代码块测试输出中的 React act(...) 警告，测试输出恢复干净
+
 ## [0.1.2] - 2026-07-17
 
 ### 安全
@@ -50,5 +63,6 @@
 
 - Kami 风格的 Windows Markdown 查看器：GFM 渲染、代码高亮、本地图片解析、自定义滚动条、无边框窗口、文件关联与启动参数打开
 
+[0.1.3]: https://github.com/HwFee/kami-markdown-viewer/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/HwFee/kami-markdown-viewer/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/HwFee/kami-markdown-viewer/compare/v0.1.0...v0.1.1

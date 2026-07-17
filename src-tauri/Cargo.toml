@@ -1,6 +1,6 @@
 [package]
 name = "kami-markdown-viewer"
-version = "0.1.2"
+version = "0.1.3"
 description = "A Kami-inspired Markdown viewer for Windows"
 authors = ["Kami Markdown Viewer"]
 edition = "2021"
