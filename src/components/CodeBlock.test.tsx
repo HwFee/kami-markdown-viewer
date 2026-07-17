@@ -13,8 +13,10 @@ describe("CodeBlock", () => {
     vi.useRealTimers();
   });
 
-  it("renders the wrapper with a single real pre inside and no nested pre", () => {
+  it("renders the wrapper with a single real pre inside and no nested pre", async () => {
     const { container } = render(<CodeBlock code="const x = 1;" />);
+    // 让按需加载的高亮语言包在 act 内完成，避免 act(...) 警告
+    await act(async () => {});
     expect(container.querySelector(".code-block")).toBeInTheDocument();
     const pres = container.querySelectorAll("pre");
     expect(pres).toHaveLength(1);

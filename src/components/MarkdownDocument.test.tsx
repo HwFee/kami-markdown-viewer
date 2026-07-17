@@ -13,7 +13,7 @@ beforeEach(() => {
 });
 
 describe("MarkdownDocument", () => {
-  it("renders headings, lists, tables, quotes, and code", () => {
+  it("renders headings, lists, tables, quotes, and code", async () => {
     const markdown = [
       "# Title",
       "",
@@ -31,6 +31,8 @@ describe("MarkdownDocument", () => {
     ].join("\n");
 
     render(<MarkdownDocument markdown={markdown} />);
+    // 让按需加载的高亮语言包在 act 内完成，避免 act(...) 警告
+    await act(async () => {});
 
     expect(screen.getByRole("heading", { name: "Title" })).toBeInTheDocument();
     expect(screen.getByText("Quote")).toBeInTheDocument();

@@ -96,6 +96,11 @@ describe("kami.css outline frameless docked panel", () => {
     expect(dot).toMatch(/background:\s*var\(--brand\)/);
   });
 
+  it("gives outline links a visible keyboard focus ring", () => {
+    const rule = css.match(/\.outline-panel__link:focus-visible\s*\{[^}]*\}/s)?.[0] ?? "";
+    expect(rule).toMatch(/outline:\s*2px solid var\(--brand\)/);
+  });
+
   it("shifts the document by the outline shift on medium/wide", () => {
     const rule = css.match(/@media\s*\(min-width:\s*720px\)\s*\{[^}]*\.app-shell__body--outline-open\s*\.document-scroll\s*\{[^}]*\}/s)?.[0] ?? "";
     expect(rule).toMatch(/margin-left:\s*var\(--outline-shift\)/);

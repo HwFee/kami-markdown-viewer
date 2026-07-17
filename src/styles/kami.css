@@ -296,7 +296,6 @@ textarea {
   width: 100%;
   padding: 5px 10px 5px 14px;
   border: 0;
-  border-radius: 3px;
   background: transparent;
   color: var(--dark-warm);
   font-family: var(--serif);
@@ -312,6 +311,11 @@ textarea {
 
 .outline-panel__link:hover {
   color: var(--brand);
+}
+
+.outline-panel__link:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
 }
 
 .outline-panel__link--active {

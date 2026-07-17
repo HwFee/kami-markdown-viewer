@@ -194,6 +194,16 @@ describe("buildOutlineTree", () => {
     ]);
   });
 
+  it("nests an h3 under the preceding h1 when no h2 exists", () => {
+    const tree = buildOutlineTree([
+      { id: "a", level: 1, text: "A" },
+      { id: "c", level: 3, text: "C" },
+    ]);
+    expect(tree).toEqual([
+      { id: "a", level: 1, text: "A", children: [{ id: "c", level: 3, text: "C", children: [] }] },
+    ]);
+  });
+
   it("returns an empty array for no headings", () => {
     expect(buildOutlineTree([])).toEqual([]);
   });
