@@ -61,19 +61,39 @@ describe("kami.css code copy reduced motion", () => {
   });
 });
 
-describe("kami.css outline floating panel", () => {
-  it("styles the outline as a floating panel with inset, border, radius, and shadow", () => {
+describe("kami.css outline frameless docked panel", () => {
+  it("docks the outline flush without card chrome", () => {
     const rule = css.match(/\.outline-sidebar\s*\{[^}]*\}/s)?.[0] ?? "";
-    expect(rule).toMatch(/border-radius:\s*6px/);
-    expect(rule).toMatch(/border:\s*1px solid var\(--border-soft\)/);
-    expect(rule).toMatch(/box-shadow:\s*0 2px 12px rgba\(20,\s*20,\s*19,\s*0\.06\)/);
-    expect(rule).toMatch(/top:\s*calc\(46px \+ var\(--outline-inset\)\)/);
-    expect(rule).toMatch(/left:\s*var\(--outline-inset\)/);
-    expect(rule).toMatch(/bottom:\s*var\(--outline-inset\)/);
+    expect(rule).toMatch(/top:\s*46px/);
+    expect(rule).toMatch(/left:\s*0/);
+    expect(rule).toMatch(/bottom:\s*0/);
+    expect(rule).toMatch(/background:\s*var\(--parchment\)/);
+    expect(rule).toMatch(/border-right:\s*1px solid var\(--hairline\)/);
+    expect(rule).not.toMatch(/border-radius/);
+    expect(rule).not.toMatch(/box-shadow/);
   });
 
-  it("defines the outline shift as inset + width + gutter", () => {
-    expect(css).toMatch(/--outline-shift:\s*calc\(var\(--outline-inset\) \+ var\(--outline-width\) \+ var\(--outline-gutter\)\)/);
+  it("declares a shared hairline color", () => {
+    expect(css).toMatch(/--hairline:\s*#dddacc/);
+  });
+
+  it("defines the outline shift as width + gutter", () => {
+    expect(css).toMatch(/--outline-shift:\s*calc\(var\(--outline-width\) \+ var\(--outline-gutter\)\)/);
+  });
+
+  it("draws a hairline guide on nested outline lists", () => {
+    const rule = css.match(/\.outline-panel__list\s+\.outline-panel__list\s*\{[^}]*\}/s)?.[0] ?? "";
+    expect(rule).toMatch(/border-left:\s*1px solid var\(--hairline\)/);
+  });
+
+  it("marks the active link with an ink dot and no background fill", () => {
+    const active = css.match(/\.outline-panel__link--active\s*\{[^}]*\}/s)?.[0] ?? "";
+    expect(active).toMatch(/color:\s*var\(--brand\)/);
+    expect(active).not.toMatch(/background/);
+    expect(active).not.toMatch(/border-left/);
+    const dot = css.match(/\.outline-panel__link--active::before\s*\{[^}]*\}/s)?.[0] ?? "";
+    expect(dot).toMatch(/border-radius:\s*50%/);
+    expect(dot).toMatch(/background:\s*var\(--brand\)/);
   });
 
   it("shifts the document by the outline shift on medium/wide", () => {
