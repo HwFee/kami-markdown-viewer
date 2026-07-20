@@ -83,7 +83,7 @@
 
 - Kami 风格的 Windows Markdown 查看器：GFM 渲染、代码高亮、本地图片解析、自定义滚动条、无边框窗口、文件关联与启动参数打开
 
-[1.0.0]: https://github.com/HwFee/kami-markdown-viewer/compare/v0.1.3...v1.0.0
-[0.1.3]: https://github.com/HwFee/kami-markdown-viewer/compare/v0.1.2...v0.1.3
-[0.1.2]: https://github.com/HwFee/kami-markdown-viewer/compare/v0.1.1...v0.1.2
-[0.1.1]: https://github.com/HwFee/kami-markdown-viewer/compare/v0.1.0...v0.1.1
+[1.0.0]: https://github.com/HwFee/vellum/compare/v0.1.3...v1.0.0
+[0.1.3]: https://github.com/HwFee/vellum/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/HwFee/vellum/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/HwFee/vellum/compare/v0.1.0...v0.1.1

@@ -14,7 +14,7 @@ _A warm, parchment-toned Markdown viewer for Windows._
 
 ## Download
 
-The easiest way to get started is to download the latest installer from [GitHub Releases](https://github.com/HwFee/kami-markdown-viewer/releases).
+The easiest way to get started is to download the latest installer from [GitHub Releases](https://github.com/HwFee/vellum/releases).
 
 Two Windows installer formats are provided:
 
