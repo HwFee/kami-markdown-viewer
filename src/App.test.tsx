@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "./App";
@@ -66,7 +67,7 @@ afterEach(() => {
 
 test("renders the empty viewer state", () => {
   render(<App />);
-  expect(screen.getByRole("heading", { name: "Kami Markdown Viewer" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "素笺" })).toBeInTheDocument();
   expect(screen.getByText("打开 Markdown 文件开始查看。")).toBeInTheDocument();
 });
 
@@ -199,6 +200,92 @@ test("ignores a stale load response when a newer file was opened", async () => {
 
   expect(screen.getByRole("heading", { name: "DocB" })).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "DocA" })).not.toBeInTheDocument();
+});
+
+test("silently reloads the document when file-changed event fires", async () => {
+  vi.mocked(listen).mockClear();
+
+  vi.mocked(open).mockResolvedValueOnce("C:/notes/reload.md");
+  vi.mocked(invoke).mockResolvedValueOnce(null);
+  vi.mocked(invoke).mockResolvedValueOnce({
+    path: "C:/notes/reload.md",
+    fileName: "reload.md",
+    parentPath: "C:/notes",
+    markdown: "# V1",
+  });
+
+  render(<App />);
+  fireEvent.click(screen.getByRole("button", { name: "打开文件" }));
+  await waitFor(() => expect(screen.getByRole("heading", { name: "V1" })).toBeInTheDocument());
+
+  await waitFor(() => {
+    expect(vi.mocked(listen).mock.calls.some(([event]) => event === "file-changed")).toBe(true);
+  });
+
+  vi.mocked(invoke).mockResolvedValueOnce({
+    path: "C:/notes/reload.md",
+    fileName: "reload.md",
+    parentPath: "C:/notes",
+    markdown: "# V2",
+  });
+
+  const fileChangedCall = vi.mocked(listen).mock.calls.find(
+    ([event]) => event === "file-changed"
+  );
+  await act(async () => {
+    (fileChangedCall![1] as (payload: unknown) => void)({ payload: {} });
+  });
+
+  await waitFor(() => expect(screen.getByRole("heading", { name: "V2" })).toBeInTheDocument());
+  expect(screen.queryByRole("heading", { name: "V1" })).not.toBeInTheDocument();
+});
+
+test("preserves scroll position across a hot reload", async () => {
+  vi.mocked(listen).mockClear();
+
+  vi.mocked(open).mockResolvedValueOnce("C:/notes/scroll.md");
+  vi.mocked(invoke).mockResolvedValueOnce(null);
+  vi.mocked(invoke).mockResolvedValueOnce({
+    path: "C:/notes/scroll.md",
+    fileName: "scroll.md",
+    parentPath: "C:/notes",
+    markdown: "# ScrollDoc",
+  });
+
+  render(<App />);
+  fireEvent.click(screen.getByRole("button", { name: "打开文件" }));
+  await waitFor(() => expect(screen.getByRole("heading", { name: "ScrollDoc" })).toBeInTheDocument());
+
+  const scrollContainer = document.querySelector(".document-scroll") as HTMLElement;
+  let scrollTop = 240;
+  Object.defineProperty(scrollContainer, "scrollTop", {
+    configurable: true,
+    get: () => scrollTop,
+    set: (value: number) => {
+      scrollTop = value;
+    },
+  });
+
+  await waitFor(() => {
+    expect(vi.mocked(listen).mock.calls.some(([event]) => event === "file-changed")).toBe(true);
+  });
+
+  vi.mocked(invoke).mockResolvedValueOnce({
+    path: "C:/notes/scroll.md",
+    fileName: "scroll.md",
+    parentPath: "C:/notes",
+    markdown: "# ScrollDoc Updated",
+  });
+
+  const fileChangedCall = vi.mocked(listen).mock.calls.find(
+    ([event]) => event === "file-changed"
+  );
+  await act(async () => {
+    (fileChangedCall![1] as (payload: unknown) => void)({ payload: {} });
+  });
+
+  await waitFor(() => expect(screen.getByRole("heading", { name: "ScrollDoc Updated" })).toBeInTheDocument());
+  expect(scrollContainer.scrollTop).toBe(240);
 });
 
 describe("App outline integration", () => {

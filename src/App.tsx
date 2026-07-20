@@ -7,6 +7,7 @@ import { EmptyState } from "./components/EmptyState";
 import { ErrorState } from "./components/ErrorState";
 import { MarkdownDocument } from "./components/MarkdownDocument";
 import { OutlinePanel } from "./components/OutlinePanel";
+import { ReloadToast } from "./components/ReloadToast";
 import { TopBar } from "./components/TopBar";
 import { useIsNarrow } from "./hooks/useIsNarrow";
 import { useOutlineOpen } from "./hooks/useOutlineOpen";
@@ -16,10 +17,13 @@ import type { DocumentState, LoadedDocument } from "./types";
 
 export default function App() {
   const [state, setState] = useState<DocumentState>({ status: "empty" });
+  const [reloadTick, setReloadTick] = useState(0);
   const startupLoaded = useRef(false);
   const loadRequestRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const currentPathRef = useRef<string | null>(null);
+  const pendingScrollRef = useRef<number | null>(null);
   const [isOutlineOpen, toggleOutline, setIsOutlineOpen] = useOutlineOpen(false);
   const isNarrow = useIsNarrow();
 
@@ -30,10 +34,29 @@ export default function App() {
     try {
       const document = await invoke<LoadedDocument>("load_document", { path });
       if (loadRequestRef.current !== requestId) return;
+      currentPathRef.current = document.path;
       setState({ status: "ready", document });
     } catch (error) {
       if (loadRequestRef.current !== requestId) return;
       setState({ status: "error", message: String(error), path });
+    }
+  }
+
+  /// 热重载：静默重新读取当前文档，不闪烁 loading 态、不弹错误、保留滚动位置。
+  async function reloadCurrent() {
+    const path = currentPathRef.current;
+    if (!path) return;
+    const requestId = ++loadRequestRef.current;
+    try {
+      const document = await invoke<LoadedDocument>("load_document", { path });
+      if (loadRequestRef.current !== requestId) return;
+      const container = scrollRef.current;
+      pendingScrollRef.current = container ? container.scrollTop : 0;
+      currentPathRef.current = document.path;
+      setState({ status: "ready", document });
+      setReloadTick((tick) => tick + 1);
+    } catch {
+      // 重载失败时保留旧内容，不打扰用户
     }
   }
 
@@ -82,6 +105,30 @@ export default function App() {
     };
   }, []);
 
+  // 监听后端文件变更事件，触发静默热重载
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    async function bindReload() {
+      const unlistenFn = await listen("file-changed", () => {
+        void reloadCurrent();
+      });
+      if (cancelled) {
+        unlistenFn();
+      } else {
+        unlisten = unlistenFn;
+      }
+    }
+
+    void bindReload();
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
   const activeDocument = state.status === "ready" ? state.document : undefined;
 
   // 切换文档时回到顶部，避免沿用上一篇文档的滚动位置
@@ -91,6 +138,17 @@ export default function App() {
       container.scrollTop = 0;
     }
   }, [activeDocument?.path]);
+
+  // 热重载时保留滚动位置（同路径、内容变化）
+  useEffect(() => {
+    if (pendingScrollRef.current !== null) {
+      const container = scrollRef.current;
+      if (container) {
+        container.scrollTop = pendingScrollRef.current;
+      }
+      pendingScrollRef.current = null;
+    }
+  }, [activeDocument?.markdown]);
 
   // 窄屏下按 Escape 关闭大纲面板
   useEffect(() => {
@@ -155,6 +213,7 @@ export default function App() {
         </div>
       </div>
       <CustomScrollbar containerRef={scrollRef} contentRef={contentRef} />
+      {reloadTick > 0 && <ReloadToast key={reloadTick} />}
       {isOutlineOpen && isNarrow && (
         <div className="outline-scrim" role="presentation" onClick={() => setIsOutlineOpen(false)} />
       )}

@@ -1,17 +1,17 @@
 @font-face {
   font-family: "TsangerJinKai02";
-  src: url("/fonts/TsangerJinKai02-W04.ttf") format("truetype");
+  src: url("/fonts/TsangerJinKai02-W04.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
-  font-display: swap;
+  font-display: block;
 }
 
 @font-face {
   font-family: "TsangerJinKai02";
-  src: url("/fonts/TsangerJinKai02-W05.ttf") format("truetype");
+  src: url("/fonts/TsangerJinKai02-W05.woff2") format("woff2");
   font-weight: 500;
   font-style: normal;
-  font-display: swap;
+  font-display: block;
 }
 
 @font-face {
@@ -19,7 +19,7 @@
   src: url("/fonts/JetBrainsMono.woff2") format("woff2");
   font-weight: 400 500;
   font-style: normal;
-  font-display: swap;
+  font-display: block;
 }
 
 :root {
@@ -361,6 +361,49 @@ textarea {
   }
   to {
     opacity: 1;
+  }
+}
+
+.reload-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  z-index: 1100;
+  padding: 7px 16px;
+  border-radius: 4px;
+  background: var(--ivory);
+  color: var(--brand);
+  font-family: var(--serif);
+  font-size: 12px;
+  letter-spacing: 0.5pt;
+  box-shadow: 0 1px 3px rgba(20, 20, 19, 0.06), inset 0 0 0 1px var(--hairline);
+  pointer-events: none;
+  animation: reload-toast-fade 1.5s ease forwards;
+  transform: translateX(-50%);
+}
+
+@keyframes reload-toast-fade {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+  15% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  85% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reload-toast {
+    animation-duration: 0.01ms;
   }
 }
 

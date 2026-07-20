@@ -1,9 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use notify::RecommendedWatcher;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use kami_markdown_viewer_lib::document::{self, LoadedDocument};
+use vellum_lib::document::{self, LoadedDocument};
+use vellum_lib::watcher;
 use serde_json::json;
 use tauri::{Emitter, Manager};
 
@@ -24,7 +26,11 @@ struct StartupState {
 /// only trusted anchor for resolving local asset paths, so the frontend can
 /// never steer file reads outside the open document's directory.
 #[derive(Debug, Default)]
-struct AppState(Mutex<Option<PathBuf>>);
+struct AppState {
+    current: Mutex<Option<PathBuf>>,
+    /// 当前文档的文件监听器。drop 时自动停止监听并结束事件循环线程。
+    watcher: Mutex<Option<RecommendedWatcher>>,
+}
 
 #[tauri::command]
 fn get_startup_path(state: tauri::State<StartupState>) -> Option<String> {
@@ -35,13 +41,30 @@ fn get_startup_path(state: tauri::State<StartupState>) -> Option<String> {
 async fn load_document(
     path: String,
     state: tauri::State<'_, AppState>,
+    app_handle: tauri::AppHandle,
 ) -> Result<LoadedDocument, String> {
     let doc = document::load_markdown_file(Path::new(&path))?;
+    let canonical = PathBuf::from(&doc.path);
+
+    // 切换文档时重建监听器：先 drop 旧的（停止其线程），再为新路径创建。
+    // 监听失败不应阻断文档加载（例如网络盘不支持 notify），仅记录错误。
+    {
+        let mut watcher_lock = state
+            .watcher
+            .lock()
+            .map_err(|_| "Watcher lock poisoned".to_string())?;
+        *watcher_lock = None;
+        match watcher::watch_file(app_handle.clone(), canonical.clone()) {
+            Ok(w) => *watcher_lock = Some(w),
+            Err(e) => eprintln!("file watcher disabled: {e}"),
+        }
+    }
+
     let mut current = state
-        .0
+        .current
         .lock()
         .map_err(|_| "Document state lock poisoned".to_string())?;
-    *current = Some(PathBuf::from(&doc.path));
+    *current = Some(canonical);
     Ok(doc)
 }
 
@@ -52,7 +75,7 @@ async fn resolve_asset(
 ) -> Result<String, String> {
     let anchor_dir = {
         let current = state
-            .0
+            .current
             .lock()
             .map_err(|_| "Document state lock poisoned".to_string())?;
         current
@@ -88,5 +111,5 @@ fn main() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("failed to run Kami Markdown Viewer");
+        .expect("failed to run 素笺");
 }

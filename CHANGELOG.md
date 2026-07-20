@@ -4,6 +4,26 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.0] - 2026-07-21
+
+### 重命名
+
+- 项目由 "Kami Markdown Viewer" 更名为 "Vellum · 素笺"，应用标识符改为 `local.vellum`
+
+### 新增
+
+- 文件热重载：Rust 侧 `notify` 监听当前文档所在目录（兼容编辑器原子保存），400ms 防抖合并连续保存，变更后静默重载并保留滚动位置，底部弹出"墨迹未干"提示
+- 字体预加载：TTF 转 WOFF2（体积减半）、`font-display: block`、`<link rel="preload">`、渲染前等待 `document.fonts.ready`（3s 兜底），消除首屏字体闪烁
+
+### 变更
+
+- 应用图标全套更新
+- 重载提示 toast 改为纸面墨蓝风格（象牙底 + 墨蓝衬线 + 发丝线边框）
+
+### 修复
+
+- 首屏字体闪烁（FOUT）：打开时不再先显示回退字体再切换
+
 ## [0.1.3] - 2026-07-17
 
 ### 变更
@@ -63,6 +83,7 @@
 
 - Kami 风格的 Windows Markdown 查看器：GFM 渲染、代码高亮、本地图片解析、自定义滚动条、无边框窗口、文件关联与启动参数打开
 
+[1.0.0]: https://github.com/HwFee/kami-markdown-viewer/compare/v0.1.3...v1.0.0
 [0.1.3]: https://github.com/HwFee/kami-markdown-viewer/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/HwFee/kami-markdown-viewer/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/HwFee/kami-markdown-viewer/compare/v0.1.0...v0.1.1

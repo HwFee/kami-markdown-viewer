@@ -1,13 +1,13 @@
 <div align="center">
 
-# Kami Markdown Viewer
+# Vellum · 素笺
 
-_A read-only Markdown viewer for Windows, crafted with Kami's warm document aesthetic._
+_A warm, parchment-toned Markdown viewer for Windows._
 
 <p align="center">
-  <img src="./assets/screenshots/screenshot-1.png" width="32%" alt="Kami Markdown Viewer screenshot 1" />
-  <img src="./assets/screenshots/screenshot-2.png" width="32%" alt="Kami Markdown Viewer screenshot 2" />
-  <img src="./assets/screenshots/screenshot-3.png" width="32%" alt="Kami Markdown Viewer screenshot 3" />
+  <img src="./assets/screenshots/screenshot-1.png" width="32%" alt="Vellum · 素笺 screenshot 1" />
+  <img src="./assets/screenshots/screenshot-2.png" width="32%" alt="Vellum · 素笺 screenshot 2" />
+  <img src="./assets/screenshots/screenshot-3.png" width="32%" alt="Vellum · 素笺 screenshot 3" />
 </p>
 
 </div>
@@ -18,14 +18,14 @@ The easiest way to get started is to download the latest installer from [GitHub 
 
 Two Windows installer formats are provided:
 
-- **MSI** — `Kami Markdown Viewer_0.1.0_x64_en-US.msi`  
+- **MSI** - `素笺_0.1.0_x64_en-US.msi`  
   Recommended for system-wide or managed installs.
-- **NSIS Setup** — `Kami Markdown Viewer_0.1.0_x64-setup.exe`  
+- **NSIS Setup** - `素笺_0.1.0_x64-setup.exe`  
   Recommended for a lightweight per-user install.
 
 Both installers automatically register `.md` and `.markdown` file associations, so you can open Markdown files directly from File Explorer.
 
-> **Platform note:** Kami Markdown Viewer is currently built and tested for **Windows 10/11 x64** only.
+> **Platform note:** Vellum · 素笺 is currently built and tested for **Windows 10/11 x64** only.
 
 ## Features
 
@@ -63,7 +63,7 @@ Both installers automatically register `.md` and `.markdown` file associations, 
 
 ## Credits
 
-The visual language — warm paper tones, serif body type, and restrained navy accents — is directly inspired by **[Kami](https://github.com/tw93/kami)**, Tw93's beautiful document system. This viewer brings that same reading feeling to Markdown files on Windows.
+The visual language — warm paper tones, serif body type, and restrained navy accents — is directly inspired by **[Kami](https://github.com/tw93/kami)**, Tw93's beautiful document system. Vellum · 素笺 brings that same reading feeling to Markdown files on Windows.
 
 ## License
 
