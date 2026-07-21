@@ -266,12 +266,24 @@ textarea {
 }
 
 .outline-panel__header {
-  margin-bottom: 10px;
-  padding: 0 8px;
-  color: var(--stone);
-  font-size: 12px;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
+  margin-bottom: 16px;
+  padding: 0 8px 9px;
+  color: var(--brand);
+  font-size: 16px;
+  letter-spacing: 5px;
+  border-bottom: 1px solid var(--hairline);
+  position: relative;
+}
+
+.outline-panel__header::after {
+  content: "";
+  position: absolute;
+  left: 9px;
+  bottom: -3.5px;
+  width: 6px;
+  height: 6px;
+  background: var(--brand);
+  border-radius: 1px;
 }
 
 .outline-panel__list {
@@ -282,7 +294,7 @@ textarea {
 
 .outline-panel__list .outline-panel__list {
   margin: 2px 0 2px 6px;
-  padding-left: 11px;
+  padding-left: 12px;
   border-left: 1px solid var(--hairline);
 }
 
@@ -294,13 +306,13 @@ textarea {
 .outline-panel__link {
   display: block;
   width: 100%;
-  padding: 5px 10px 5px 14px;
+  padding: 5px 10px 5px 16px;
   border: 0;
   background: transparent;
   color: var(--dark-warm);
   font-family: var(--serif);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 13.5px;
+  line-height: 1.6;
   text-align: left;
   white-space: nowrap;
   overflow: hidden;
@@ -318,6 +330,12 @@ textarea {
   outline-offset: -2px;
 }
 
+.outline-panel__num {
+  color: var(--stone);
+  margin-right: 6px;
+  font-size: 12.5px;
+}
+
 .outline-panel__link--active {
   position: relative;
   color: var(--brand);
@@ -328,12 +346,15 @@ textarea {
   content: "";
   position: absolute;
   left: 5px;
-  top: 50%;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
+  top: 9px;
+  bottom: 9px;
+  width: 2px;
   background: var(--brand);
-  transform: translateY(-50%);
+  border-radius: 1px;
+}
+
+.outline-panel__link--active .outline-panel__num {
+  color: var(--brand);
 }
 
 .outline-panel__empty {
@@ -364,45 +385,76 @@ textarea {
   }
 }
 
-.reload-toast {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  z-index: 1100;
-  padding: 7px 16px;
-  border-radius: 4px;
-  background: var(--ivory);
-  color: var(--brand);
-  font-family: var(--serif);
-  font-size: 12px;
-  letter-spacing: 0.5pt;
-  box-shadow: 0 1px 3px rgba(20, 20, 19, 0.06), inset 0 0 0 1px var(--hairline);
-  pointer-events: none;
-  animation: reload-toast-fade 1.5s ease forwards;
-  transform: translateX(-50%);
+/* 热重载提示（一）：新墨过渡——正文由虚而实，像新墨落纸 */
+.document-content.fresh-ink {
+  animation: fresh-ink 1s ease;
 }
 
-@keyframes reload-toast-fade {
+@keyframes fresh-ink {
+  0% {
+    opacity: 0.35;
+    filter: blur(5px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+/* 热重载提示（二）：页边批注——装订线一侧竖排小字，随文档滚动，仅宽窗口显示 */
+/* TODO: 当前位置依赖固定 top/left，在不同窗口与大纲布局下观感不稳定；后续重做定位方案。 */
+.reload-note {
+  position: absolute;
+  top: 118px;
+  left: calc(50% - 400px + 4px);
+  z-index: 10;
+  writing-mode: vertical-rl;
+  font-size: 12px;
+  letter-spacing: 5px;
+  color: var(--stone);
+  pointer-events: none;
+  animation: reload-note-fade 2.8s ease forwards;
+}
+
+.reload-note::before {
+  content: "";
+  display: block;
+  width: 5px;
+  height: 5px;
+  margin: 0 auto 8px;
+  background: var(--brand);
+  border-radius: 1px;
+}
+
+@keyframes reload-note-fade {
   0% {
     opacity: 0;
-    transform: translateX(-50%) translateY(8px);
+    transform: translateY(-6px);
   }
-  15% {
+  12% {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translateY(0);
   }
-  85% {
+  82% {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translateY(0);
   }
   100% {
     opacity: 0;
-    transform: translateX(-50%) translateY(8px);
+    transform: translateY(0);
+  }
+}
+
+/* 仅手机窄屏退场；桌面和平板的正文内侧留白足够容纳批注 */
+@media (max-width: 719px) {
+  .reload-note {
+    display: none;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .reload-toast {
+  .document-content.fresh-ink,
+  .reload-note {
     animation-duration: 0.01ms;
   }
 }
@@ -418,6 +470,10 @@ textarea {
   .app-shell__body--outline-open .empty-state,
   .app-shell__body--outline-open .error-state {
     max-width: var(--content-max-width-wide);
+  }
+
+  .app-shell__body--outline-open .reload-note {
+    left: calc(50% - 480px + 4px);
   }
 }
 
@@ -452,6 +508,7 @@ textarea {
 }
 
 .document-scroll__content {
+  position: relative;
   min-height: 100%;
   padding: 70px 16px 40px;
 }

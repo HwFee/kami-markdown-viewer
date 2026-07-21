@@ -1,3 +1,4 @@
+pub mod association;
 pub mod document;
 pub mod watcher;
 

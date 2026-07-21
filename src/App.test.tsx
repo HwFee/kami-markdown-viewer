@@ -4,8 +4,13 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "./App";
 
+const backendInvoke = vi.fn();
+const drainInvoke = vi.fn(() => Promise.resolve<string[]>([]));
+
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(),
+  invoke: vi.fn((command: string, args?: unknown) =>
+    command === "drain_pending_open_paths" ? drainInvoke() : backendInvoke(command, args)
+  ),
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
@@ -17,18 +22,23 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({
+  getCurrentWindow: vi.fn(() => ({
     minimize: vi.fn(),
     toggleMaximize: vi.fn(),
     close: vi.fn(),
-  }),
+  })),
 }));
+
+const lastOpenedGet = vi.fn(() => Promise.resolve<string | undefined>(undefined));
+const storeGet = vi.fn((key: string) =>
+  key === "lastOpenedPath" ? lastOpenedGet() : Promise.resolve(undefined)
+);
 
 vi.mock("@tauri-apps/plugin-store", () => ({
   Store: {
     load: vi.fn(() =>
       Promise.resolve({
-        get: vi.fn(() => Promise.resolve(undefined)),
+        get: storeGet,
         set: vi.fn(() => Promise.resolve()),
         save: vi.fn(() => Promise.resolve()),
       })
@@ -44,8 +54,7 @@ const loadedDoc = {
 };
 
 async function loadDocument() {
-  vi.mocked(invoke).mockResolvedValueOnce(null);
-  vi.mocked(invoke).mockResolvedValueOnce(loadedDoc);
+  backendInvoke.mockResolvedValueOnce(loadedDoc);
   vi.mocked(open).mockResolvedValueOnce("C:/notes/readme.md");
 
   render(<App />);
@@ -59,6 +68,15 @@ async function loadDocument() {
 beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
   window.innerWidth = 1024;
+  vi.mocked(invoke).mockClear();
+  backendInvoke.mockReset();
+  drainInvoke.mockReset();
+  drainInvoke.mockResolvedValue([]);
+  storeGet.mockClear();
+  lastOpenedGet.mockReset();
+  lastOpenedGet.mockResolvedValue(undefined);
+  vi.mocked(listen).mockReset();
+  vi.mocked(listen).mockResolvedValue(() => {});
 });
 
 afterEach(() => {
@@ -77,10 +95,42 @@ test("renders the top bar", () => {
   expect(screen.getByRole("button", { name: "打开文件" })).toBeInTheDocument();
 });
 
+test("registers the pending listener before draining paths", async () => {
+  let resolveListen!: (unlisten: () => void) => void;
+  vi.mocked(listen).mockImplementationOnce(
+    () => new Promise((resolve) => { resolveListen = resolve; })
+  );
+
+  render(<App />);
+  await act(async () => {});
+  expect(drainInvoke).not.toHaveBeenCalled();
+
+  await act(async () => resolveListen(() => {}));
+  await waitFor(() => expect(drainInvoke).toHaveBeenCalledTimes(1));
+});
+
+test("loads the last-opened path after an empty startup drain", async () => {
+  lastOpenedGet.mockResolvedValueOnce("C:/notes/last.md");
+  backendInvoke.mockResolvedValueOnce({ ...loadedDoc, path: "C:/notes/last.md" });
+
+  render(<App />);
+
+  await waitFor(() => expect(backendInvoke).toHaveBeenCalledWith("load_document", {
+    path: "C:/notes/last.md",
+  }));
+});
+
+test("renders an initial drain error", async () => {
+  drainInvoke.mockRejectedValueOnce("Cannot read pending paths");
+
+  render(<App />);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Cannot read pending paths");
+});
+
 test("loads a selected Markdown file", async () => {
   vi.mocked(open).mockResolvedValueOnce("C:/notes/readme.md");
-  vi.mocked(invoke).mockResolvedValueOnce(null);
-  vi.mocked(invoke).mockResolvedValueOnce({
+  backendInvoke.mockResolvedValueOnce({
     path: "C:/notes/readme.md",
     fileName: "readme.md",
     parentPath: "C:/notes",
@@ -99,8 +149,7 @@ test("loads a selected Markdown file", async () => {
 
 test("renders a file load error", async () => {
   vi.mocked(open).mockResolvedValueOnce("C:/notes/missing.md");
-  vi.mocked(invoke).mockResolvedValueOnce(null);
-  vi.mocked(invoke).mockRejectedValueOnce("Cannot open file");
+  backendInvoke.mockRejectedValueOnce("Cannot open file");
 
   render(<App />);
   fireEvent.click(screen.getByRole("button", { name: "打开文件" }));
@@ -109,9 +158,12 @@ test("renders a file load error", async () => {
   expect(screen.getByText("C:/notes/missing.md")).toBeInTheDocument();
 });
 
-test("loads startup Markdown file from backend state", async () => {
-  vi.mocked(invoke).mockResolvedValueOnce("C:/notes/startup.md");
-  vi.mocked(invoke).mockResolvedValueOnce({
+test("loads the latest queued startup Markdown file", async () => {
+  vi.mocked(invoke).mockResolvedValueOnce([
+    "C:/notes/older.md",
+    "C:/notes/startup.md",
+  ]);
+  backendInvoke.mockResolvedValueOnce({
     path: "C:/notes/startup.md",
     fileName: "startup.md",
     parentPath: "C:/notes",
@@ -121,15 +173,15 @@ test("loads startup Markdown file from backend state", async () => {
   render(<App />);
 
   await waitFor(() => {
-    expect(invoke).toHaveBeenCalledWith("get_startup_path");
+    expect(invoke).toHaveBeenCalledWith("drain_pending_open_paths");
   });
   await waitFor(() => expect(screen.getByRole("heading", { name: "Startup" })).toBeInTheDocument());
+  expect(invoke).not.toHaveBeenCalledWith("load_document", { path: "C:/notes/older.md" });
 });
 
 test("resets the scroll position when a different document is opened", async () => {
   vi.mocked(open).mockResolvedValueOnce("C:/notes/a.md");
-  vi.mocked(invoke).mockResolvedValueOnce(null);
-  vi.mocked(invoke).mockResolvedValueOnce({
+  backendInvoke.mockResolvedValueOnce({
     path: "C:/notes/a.md",
     fileName: "a.md",
     parentPath: "C:/notes",
@@ -152,7 +204,7 @@ test("resets the scroll position when a different document is opened", async () 
   expect(scrollContainer.scrollTop).toBe(120);
 
   vi.mocked(open).mockResolvedValueOnce("C:/notes/b.md");
-  vi.mocked(invoke).mockResolvedValueOnce({
+  backendInvoke.mockResolvedValueOnce({
     path: "C:/notes/b.md",
     fileName: "b.md",
     parentPath: "C:/notes",
@@ -171,15 +223,14 @@ test("ignores a stale load response when a newer file was opened", async () => {
   });
 
   vi.mocked(open).mockResolvedValueOnce("C:/notes/a.md");
-  vi.mocked(invoke).mockResolvedValueOnce(null);
-  vi.mocked(invoke).mockReturnValueOnce(firstPromise);
+  backendInvoke.mockReturnValueOnce(firstPromise);
 
   render(<App />);
   fireEvent.click(screen.getByRole("button", { name: "打开文件" }));
   await waitFor(() => expect(invoke).toHaveBeenCalledWith("load_document", { path: "C:/notes/a.md" }));
 
   vi.mocked(open).mockResolvedValueOnce("C:/notes/b.md");
-  vi.mocked(invoke).mockResolvedValueOnce({
+  backendInvoke.mockResolvedValueOnce({
     path: "C:/notes/b.md",
     fileName: "b.md",
     parentPath: "C:/notes",
@@ -206,8 +257,7 @@ test("silently reloads the document when file-changed event fires", async () => 
   vi.mocked(listen).mockClear();
 
   vi.mocked(open).mockResolvedValueOnce("C:/notes/reload.md");
-  vi.mocked(invoke).mockResolvedValueOnce(null);
-  vi.mocked(invoke).mockResolvedValueOnce({
+  backendInvoke.mockResolvedValueOnce({
     path: "C:/notes/reload.md",
     fileName: "reload.md",
     parentPath: "C:/notes",
@@ -222,7 +272,7 @@ test("silently reloads the document when file-changed event fires", async () => 
     expect(vi.mocked(listen).mock.calls.some(([event]) => event === "file-changed")).toBe(true);
   });
 
-  vi.mocked(invoke).mockResolvedValueOnce({
+  backendInvoke.mockResolvedValueOnce({
     path: "C:/notes/reload.md",
     fileName: "reload.md",
     parentPath: "C:/notes",
@@ -244,8 +294,7 @@ test("preserves scroll position across a hot reload", async () => {
   vi.mocked(listen).mockClear();
 
   vi.mocked(open).mockResolvedValueOnce("C:/notes/scroll.md");
-  vi.mocked(invoke).mockResolvedValueOnce(null);
-  vi.mocked(invoke).mockResolvedValueOnce({
+  backendInvoke.mockResolvedValueOnce({
     path: "C:/notes/scroll.md",
     fileName: "scroll.md",
     parentPath: "C:/notes",
@@ -270,7 +319,7 @@ test("preserves scroll position across a hot reload", async () => {
     expect(vi.mocked(listen).mock.calls.some(([event]) => event === "file-changed")).toBe(true);
   });
 
-  vi.mocked(invoke).mockResolvedValueOnce({
+  backendInvoke.mockResolvedValueOnce({
     path: "C:/notes/scroll.md",
     fileName: "scroll.md",
     parentPath: "C:/notes",
@@ -305,8 +354,7 @@ describe("App outline integration", () => {
   });
 
   it("shows an empty outline message when the document has no headings", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce(null);
-    vi.mocked(invoke).mockResolvedValueOnce({
+    backendInvoke.mockResolvedValueOnce({
       ...loadedDoc,
       markdown: "Just plain text.",
     });
@@ -391,8 +439,7 @@ describe("App outline integration", () => {
   });
 
   it("keeps rendered images mounted when outline state changes", async () => {
-    vi.mocked(invoke).mockResolvedValueOnce(null);
-    vi.mocked(invoke).mockResolvedValueOnce({
+    backendInvoke.mockResolvedValueOnce({
       ...loadedDoc,
       markdown: "# Intro\n\n![Preview](https://example.com/preview.png)",
     });

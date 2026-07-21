@@ -86,14 +86,14 @@ describe("kami.css outline frameless docked panel", () => {
     expect(rule).toMatch(/border-left:\s*1px solid var\(--hairline\)/);
   });
 
-  it("marks the active link with an ink dot and no background fill", () => {
+  it("marks the active link with an ink rule and no background fill", () => {
     const active = css.match(/\.outline-panel__link--active\s*\{[^}]*\}/s)?.[0] ?? "";
     expect(active).toMatch(/color:\s*var\(--brand\)/);
     expect(active).not.toMatch(/background/);
     expect(active).not.toMatch(/border-left/);
-    const dot = css.match(/\.outline-panel__link--active::before\s*\{[^}]*\}/s)?.[0] ?? "";
-    expect(dot).toMatch(/border-radius:\s*50%/);
-    expect(dot).toMatch(/background:\s*var\(--brand\)/);
+    const marker = css.match(/\.outline-panel__link--active::before\s*\{[^}]*\}/s)?.[0] ?? "";
+    expect(marker).toMatch(/width:\s*2px/);
+    expect(marker).toMatch(/background:\s*var\(--brand\)/);
   });
 
   it("gives outline links a visible keyboard focus ring", () => {
