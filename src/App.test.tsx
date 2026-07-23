@@ -143,7 +143,10 @@ test("loads a selected Markdown file", async () => {
   await waitFor(() => {
     expect(invoke).toHaveBeenCalledWith("load_document", { path: "C:/notes/readme.md" });
   });
-  await waitFor(() => expect(screen.getByRole("heading", { name: "Loaded" })).toBeInTheDocument());
+  await waitFor(
+    () => expect(screen.getByRole("heading", { name: "Loaded" })).toBeInTheDocument(),
+    { timeout: 3000 }
+  );
   expect(screen.getByText("readme.md")).toBeInTheDocument();
 });
 
@@ -343,11 +346,19 @@ describe("App outline integration", () => {
     vi.mocked(open).mockClear();
   });
 
-  it("opens the outline panel when the toggle is clicked", async () => {
+  it("toggles the outline panel closed and open", async () => {
     await loadDocument();
+    const toggle = screen.getByRole("button", { name: "切换大纲" });
 
-    fireEvent.click(screen.getByRole("button", { name: "切换大纲" }));
+    // 默认打开
+    expect(document.querySelector(".outline-sidebar--open")).toBeInTheDocument();
 
+    // 点击关闭
+    fireEvent.click(toggle);
+    expect(document.querySelector(".outline-sidebar--open")).not.toBeInTheDocument();
+
+    // 再点击打开
+    fireEvent.click(toggle);
     expect(document.querySelector(".outline-sidebar--open")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Intro" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Section" })).toBeInTheDocument();
@@ -385,7 +396,7 @@ describe("App outline integration", () => {
     window.innerWidth = 500;
 
     await loadDocument();
-    fireEvent.click(screen.getByRole("button", { name: "切换大纲" }));
+    // 默认打开
     expect(document.querySelector(".outline-sidebar--open")).toBeInTheDocument();
 
     const intro = document.getElementById("intro")!;
@@ -401,8 +412,7 @@ describe("App outline integration", () => {
     window.innerWidth = 500;
 
     await loadDocument();
-    fireEvent.click(screen.getByRole("button", { name: "切换大纲" }));
-
+    // 默认打开即显示 scrim
     expect(document.querySelector(".outline-scrim")).toBeInTheDocument();
   });
 
@@ -410,8 +420,7 @@ describe("App outline integration", () => {
     window.innerWidth = 500;
 
     await loadDocument();
-    fireEvent.click(screen.getByRole("button", { name: "切换大纲" }));
-
+    // 默认打开即显示 scrim
     const scrim = document.querySelector(".outline-scrim");
     expect(scrim).toBeInTheDocument();
     fireEvent.click(scrim!);
@@ -423,7 +432,7 @@ describe("App outline integration", () => {
     window.innerWidth = 500;
 
     await loadDocument();
-    fireEvent.click(screen.getByRole("button", { name: "切换大纲" }));
+    // 默认打开
     expect(document.querySelector(".outline-sidebar--open")).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: "Escape" });
@@ -433,9 +442,13 @@ describe("App outline integration", () => {
 
   it("adds the outline-open layout class to the body", async () => {
     await loadDocument();
-    fireEvent.click(screen.getByRole("button", { name: "切换大纲" }));
 
+    // 默认打开即带 outline-open 类
     expect(document.querySelector(".app-shell__body--outline-open")).toBeInTheDocument();
+
+    // 关闭后移除
+    fireEvent.click(screen.getByRole("button", { name: "切换大纲" }));
+    expect(document.querySelector(".app-shell__body--outline-open")).not.toBeInTheDocument();
   });
 
   it("keeps rendered images mounted when outline state changes", async () => {

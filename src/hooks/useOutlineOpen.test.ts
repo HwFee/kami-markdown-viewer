@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { Store } from "@tauri-apps/plugin-store";
 import { useOutlineOpen } from "./useOutlineOpen";
+import { __resetSettingsStoreForTest } from "../lib/settings";
 
 const mockGet = vi.fn();
 const mockSet = vi.fn();
@@ -22,6 +23,8 @@ describe("useOutlineOpen", () => {
     mockGet.mockReset();
     mockSet.mockReset();
     mockSave.mockReset();
+    // settings Store 是模块级单例，需重置缓存让每个用例独立 mock
+    __resetSettingsStoreForTest();
     vi.mocked(Store.load).mockImplementation(async () => (({
       get: mockGet,
       set: mockSet,
@@ -55,16 +58,21 @@ describe("useOutlineOpen", () => {
     expect(result.current[0]).toBe(true);
   });
 
-  it("loads stored value on mount", async () => {
+  it("does not restore a stored value on mount (defaults to closed)", async () => {
+    // 产品决定：侧边栏启动时恒为关闭，即使存在持久化的开启状态也不恢复
     mockGet.mockResolvedValue(true);
+    localStorage.setItem("outlineOpen", "true");
+
     const { result } = renderHook(() => useOutlineOpen(false));
-    await waitFor(() => expect(result.current[0]).toBe(true));
+    // 等一个异步周期，确认没有任何读取把状态改回 true
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(result.current[0]).toBe(false);
   });
 
   it("persists toggle to the store", async () => {
-    mockGet.mockResolvedValue(undefined);
     const { result } = renderHook(() => useOutlineOpen(false));
-    await waitFor(() => expect(result.current[0]).toBe(false));
 
     act(() => {
       result.current[1]();
@@ -75,9 +83,7 @@ describe("useOutlineOpen", () => {
   });
 
   it("persists explicit set to the store", async () => {
-    mockGet.mockResolvedValue(undefined);
     const { result } = renderHook(() => useOutlineOpen(false));
-    await waitFor(() => expect(result.current[0]).toBe(false));
 
     act(() => {
       result.current[2](true);
@@ -87,25 +93,11 @@ describe("useOutlineOpen", () => {
     expect(mockSave).toHaveBeenCalled();
   });
 
-  it("falls back to localStorage when Store.load throws on load", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    vi.mocked(Store.load).mockRejectedValueOnce(new Error("store unavailable"));
-    localStorage.setItem("outlineOpen", "true");
-    const { result } = renderHook(() => useOutlineOpen(false));
-    await waitFor(() => expect(result.current[0]).toBe(true));
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("outlineOpen"),
-      expect.anything()
-    );
-    warnSpy.mockRestore();
-  });
-
   it("persists through localStorage when Store fails on save", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.mocked(Store.load).mockRejectedValue(new Error("store unavailable"));
 
     const { result } = renderHook(() => useOutlineOpen(false));
-    await waitFor(() => expect(result.current[0]).toBe(false));
 
     act(() => {
       result.current[1]();
@@ -119,51 +111,6 @@ describe("useOutlineOpen", () => {
     warnSpy.mockRestore();
   });
 
-  it("does not overwrite a user-initiated toggle when persisted value loads later", async () => {
-    let resolveGet: (value: boolean | undefined) => void = () => {};
-    mockGet.mockImplementation(
-      () => new Promise((resolve) => { resolveGet = resolve; })
-    );
-
-    const { result } = renderHook(() => useOutlineOpen(false));
-    expect(result.current[0]).toBe(false);
-
-    act(() => {
-      result.current[1]();
-    });
-    expect(result.current[0]).toBe(true);
-
-    await waitFor(() => expect(mockGet).toHaveBeenCalled());
-
-    await act(async () => {
-      resolveGet(false);
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    await waitFor(() => expect(result.current[0]).toBe(true));
-  });
-
-  it("warns when both store and localStorage fail on load", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    vi.mocked(Store.load).mockRejectedValueOnce(new Error("store unavailable"));
-    const getItemSpy = vi
-      .spyOn(Storage.prototype, "getItem")
-      .mockImplementation(() => {
-        throw new Error("storage disabled");
-      });
-
-    renderHook(() => useOutlineOpen(false));
-
-    await waitFor(() =>
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining("outlineOpen"),
-        expect.anything()
-      )
-    );
-
-    warnSpy.mockRestore();
-    getItemSpy.mockRestore();
-  });
-
   it("warns when both store and localStorage fail on save", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.mocked(Store.load).mockRejectedValue(new Error("store unavailable"));
@@ -174,7 +121,6 @@ describe("useOutlineOpen", () => {
       });
 
     const { result } = renderHook(() => useOutlineOpen(false));
-    await waitFor(() => expect(result.current[0]).toBe(false));
 
     act(() => {
       result.current[1]();

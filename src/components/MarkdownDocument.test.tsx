@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { MarkdownDocument } from "./MarkdownDocument";
 import { extractOutline } from "../lib/outline";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
@@ -283,5 +284,105 @@ plain block
     const { container } = render(<MarkdownDocument markdown="Use `inlineCode` here." />);
 
     expect(container.querySelector("code")).not.toHaveAttribute("node");
+  });
+
+  it("highlights searches declaratively across query changes and resets", () => {
+    const onMatchCountChange = vi.fn();
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+
+    const { container, rerender } = render(
+      <MarkdownDocument
+        markdown="Alpha alpha beta"
+        searchQuery="ALPHA"
+        activeMatchIndex={1}
+        onMatchCountChange={onMatchCountChange}
+      />
+    );
+
+    let marks = container.querySelectorAll("mark.search-match");
+    expect(marks).toHaveLength(2);
+    expect(marks[0]).toHaveTextContent("Alpha");
+    expect(marks[1]).toHaveClass("search-match--current");
+    expect(onMatchCountChange).toHaveBeenLastCalledWith(2);
+    expect(scrollIntoView).toHaveBeenLastCalledWith({ behavior: "smooth", block: "center" });
+
+    rerender(
+      <MarkdownDocument
+        markdown="Alpha alpha beta"
+        searchQuery="beta"
+        activeMatchIndex={0}
+        onMatchCountChange={onMatchCountChange}
+      />
+    );
+    marks = container.querySelectorAll("mark.search-match");
+    expect(marks).toHaveLength(1);
+    expect(marks[0]).toHaveTextContent("beta");
+    expect(marks[0]).toHaveClass("search-match--current");
+
+    rerender(
+      <MarkdownDocument
+        markdown="Alpha alpha beta"
+        searchQuery=""
+        activeMatchIndex={0}
+        onMatchCountChange={onMatchCountChange}
+      />
+    );
+    expect(container.querySelectorAll("mark.search-match")).toHaveLength(0);
+    expect(onMatchCountChange).toHaveBeenLastCalledWith(0);
+
+    rerender(
+      <MarkdownDocument
+        markdown="Alpha alpha beta"
+        searchQuery="alpha"
+        activeMatchIndex={0}
+        onMatchCountChange={onMatchCountChange}
+      />
+    );
+    expect(container.querySelectorAll("mark.search-match")).toHaveLength(2);
+  });
+
+  it("supports markdown updates, parent count state updates, and unmount while searching", () => {
+    function SearchHarness() {
+      const [count, setCount] = useState(-1);
+      const [markdown, setMarkdown] = useState("one");
+      return (
+        <>
+          <span data-testid="match-count">{count}</span>
+          <button type="button" onClick={() => setMarkdown("one one")}>update</button>
+          <MarkdownDocument
+            markdown={markdown}
+            searchQuery="one"
+            activeMatchIndex={0}
+            onMatchCountChange={setCount}
+          />
+        </>
+      );
+    }
+
+    const { container, unmount } = render(<SearchHarness />);
+    expect(screen.getByTestId("match-count")).toHaveTextContent("1");
+    expect(container.querySelectorAll("mark.search-match")).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "update" }));
+    expect(screen.getByTestId("match-count")).toHaveTextContent("2");
+    expect(container.querySelectorAll("mark.search-match")).toHaveLength(2);
+    expect(() => unmount()).not.toThrow();
+  });
+
+  it("skips inline and fenced code subtrees when highlighting", () => {
+    const { container } = render(
+      <MarkdownDocument
+        markdown={["term", "", "`term`", "", "```txt", "term", "```"].join("\n")}
+        searchQuery="term"
+        activeMatchIndex={0}
+      />
+    );
+
+    expect(container.querySelectorAll("mark.search-match")).toHaveLength(1);
+    expect(container.querySelector("code mark")).not.toBeInTheDocument();
   });
 });

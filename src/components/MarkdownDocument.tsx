@@ -3,7 +3,7 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema, type Options as RehypeSanitizeOptions } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { isValidElement, memo, useCallback, useRef, type ReactElement, type ReactNode } from "react";
+import { isValidElement, memo, useCallback, useLayoutEffect, useRef, type ReactElement, type ReactNode } from "react";
 import { MarkdownImage } from "./MarkdownImage";
 import { slugify } from "../lib/outline";
 import { CodeBlock } from "./CodeBlock";
@@ -12,7 +12,101 @@ import type { OutlineHeading } from "../types";
 type MarkdownDocumentProps = {
   markdown: string;
   headings?: OutlineHeading[];
+  /** 内容渲染进 DOM 后回调（用于在懒加载完成后恢复滚动位置等） */
+  onRendered?: () => void;
+  searchQuery?: string;
+  activeMatchIndex?: number;
+  onMatchCountChange?: (count: number) => void;
 };
+
+type HastText = { type: "text"; value: string };
+type HastElement = {
+  type: "element";
+  tagName: string;
+  properties?: Record<string, unknown>;
+  children: HastNode[];
+};
+type HastNode = HastText | HastElement | { type: string; children?: HastNode[] };
+
+type SearchHighlightOptions = {
+  query: string;
+  activeMatchIndex?: number;
+};
+
+const SEARCH_SKIP_TAGS = new Set(["mark", "script", "style", "pre", "code"]);
+
+function rehypeSearchHighlights({ query, activeMatchIndex }: SearchHighlightOptions) {
+  const normalizedQuery = query.trim().toLowerCase();
+
+  return (tree: HastNode) => {
+    if (!normalizedQuery) return;
+
+    const marks: HastElement[] = [];
+
+    function highlightChildren(parent: { children: HastNode[] }) {
+      const nextChildren: HastNode[] = [];
+
+      for (const child of parent.children) {
+        if (child.type === "text") {
+          const text = (child as HastText).value;
+          const lowerText = text.toLowerCase();
+          let lastIndex = 0;
+          let matchIndex = lowerText.indexOf(normalizedQuery);
+
+          while (matchIndex !== -1) {
+            if (matchIndex > lastIndex) {
+              nextChildren.push({ type: "text", value: text.slice(lastIndex, matchIndex) });
+            }
+
+            const mark: HastElement = {
+              type: "element",
+              tagName: "mark",
+              properties: { className: ["search-match"] },
+              children: [{
+                type: "text",
+                value: text.slice(matchIndex, matchIndex + normalizedQuery.length),
+              }],
+            };
+            marks.push(mark);
+            nextChildren.push(mark);
+            lastIndex = matchIndex + normalizedQuery.length;
+            matchIndex = lowerText.indexOf(normalizedQuery, lastIndex);
+          }
+
+          if (lastIndex === 0) {
+            nextChildren.push(child);
+          } else if (lastIndex < text.length) {
+            nextChildren.push({ type: "text", value: text.slice(lastIndex) });
+          }
+          continue;
+        }
+
+        if (child.type === "element") {
+          const element = child as HastElement;
+          if (!SEARCH_SKIP_TAGS.has(element.tagName)) {
+            highlightChildren(element);
+          }
+        } else if ("children" in child && child.children) {
+          highlightChildren(child as { children: HastNode[] });
+        }
+        nextChildren.push(child);
+      }
+
+      parent.children = nextChildren;
+    }
+
+    if ("children" in tree && tree.children) {
+      highlightChildren(tree as { children: HastNode[] });
+    }
+
+    if (marks.length > 0 && activeMatchIndex !== undefined) {
+      const currentIndex = Math.max(0, Math.min(activeMatchIndex, marks.length - 1));
+      marks[currentIndex].properties = {
+        className: ["search-match", "search-match--current"],
+      };
+    }
+  };
+}
 
 const kamiSchema: RehypeSanitizeOptions = {
   ...defaultSchema,
@@ -117,14 +211,33 @@ function extractText(node: unknown): string {
   return "";
 }
 
-export const MarkdownDocument = memo(function MarkdownDocument({ markdown, headings }: MarkdownDocumentProps) {
+export const MarkdownDocument = memo(function MarkdownDocument({ markdown, headings, onRendered, searchQuery, activeMatchIndex, onMatchCountChange }: MarkdownDocumentProps) {
   const resolveHeadingId = useHeadingIdResolver(headings);
+  const articleRef = useRef<HTMLElement>(null);
+
+  // 内容提交到 DOM 后通知父级（useLayoutEffect 在绘制前同步执行，此时 scrollHeight 已可用于测量）
+  useLayoutEffect(() => {
+    onRendered?.();
+  });
+
+  // 搜索标记由 rehype 插件声明式生成；此 effect 只读取结果并通知父级/滚动当前项。
+  useLayoutEffect(() => {
+    const marks = articleRef.current?.querySelectorAll<HTMLElement>("mark.search-match") ?? [];
+    onMatchCountChange?.(marks.length);
+    articleRef.current
+      ?.querySelector<HTMLElement>("mark.search-match--current")
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [searchQuery, activeMatchIndex, markdown, onMatchCountChange]);
 
   return (
-    <article className="markdown-body">
+    <article className="markdown-body" ref={articleRef}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw, [rehypeSanitize, kamiSchema]]}
+        rehypePlugins={[
+          rehypeRaw,
+          [rehypeSanitize, kamiSchema],
+          [rehypeSearchHighlights, { query: searchQuery ?? "", activeMatchIndex }],
+        ]}
         urlTransform={urlTransform}
         components={{
           h1: ({ children }) => <h1 id={resolveHeadingId(1, extractText(children))}>{children}</h1>,
@@ -207,3 +320,6 @@ export const MarkdownDocument = memo(function MarkdownDocument({ markdown, headi
     </article>
   );
 });
+
+// default 导出供 App.tsx 的 React.lazy 代码分割使用（命名导出保留给测试等直接引用）
+export default MarkdownDocument;

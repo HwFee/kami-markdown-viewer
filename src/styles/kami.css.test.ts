@@ -145,8 +145,8 @@ describe("kami.css top bar", () => {
 
   it("shares one ghost style between outline toggle and open button", () => {
     const rule = css.match(/\.outline-toggle,\s*\.open-button\s*\{[^}]*\}/s)?.[0] ?? "";
-    expect(rule).toMatch(/width:\s*26px/);
-    expect(rule).toMatch(/height:\s*26px/);
+    expect(rule).toMatch(/width:\s*28px/);
+    expect(rule).toMatch(/height:\s*28px/);
     expect(rule).toMatch(/box-shadow:\s*inset 0 0 0 1px var\(--hairline\)/);
   });
 });

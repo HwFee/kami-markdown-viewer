@@ -36,7 +36,6 @@
   --hairline: #dddacc;
   --outline-width: 240px;
   --content-max-width: min(800px, 100%);
-  --content-max-width-wide: min(960px, 100%);
   --outline-gutter: 20px;
   --outline-shift: calc(var(--outline-width) + var(--outline-gutter));
   --serif: "TsangerJinKai02", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", Charter, Georgia, Palatino, serif;
@@ -151,8 +150,8 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   margin-right: 8px;
   border: 0;
   border-radius: 6px;
@@ -199,8 +198,8 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: 0;
   border-radius: 6px;
@@ -231,6 +230,7 @@ textarea {
 }
 
 .app-shell__body {
+  position: relative;
   display: flex;
   height: 100vh;
   min-height: 0;
@@ -262,12 +262,12 @@ textarea {
 }
 
 .outline-panel {
-  padding: 20px 12px;
+  padding: 0 12px 20px;
 }
 
 .outline-panel__header {
   margin-bottom: 16px;
-  padding: 0 8px 9px;
+  padding: 20px 8px 9px;
   color: var(--brand);
   font-size: 16px;
   letter-spacing: 5px;
@@ -364,6 +364,112 @@ textarea {
   text-align: center;
 }
 
+/* ===== 搜索框（样式 C 描边式） ===== */
+.outline-search {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  margin-bottom: 14px;
+  background: var(--ivory);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.outline-search:focus-within,
+.outline-search--active {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 10%, transparent);
+}
+
+.outline-search__icon {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--stone);
+  transition: color 0.15s ease;
+}
+
+.outline-search:focus-within .outline-search__icon,
+.outline-search--active .outline-search__icon {
+  color: var(--brand);
+}
+
+.outline-search__input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-family: var(--serif);
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: 0.3px;
+  color: var(--near-black);
+}
+
+.outline-search__input::placeholder {
+  color: var(--stone);
+}
+
+.outline-search__kbd {
+  flex-shrink: 0;
+  font: 500 9px/1 var(--mono);
+  color: var(--stone);
+  background: var(--parchment);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 4px;
+}
+
+.outline-search__results {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.outline-search__count {
+  font: 500 10px/1 var(--mono);
+  color: var(--brand);
+  white-space: nowrap;
+}
+
+.outline-search__nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--stone);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.outline-search__nav:hover {
+  background: var(--warm-sand);
+  color: var(--brand);
+}
+
+/* ===== 搜索高亮（原文） ===== */
+mark.search-match {
+  background: color-mix(in srgb, var(--brand) 18%, transparent);
+  color: var(--brand);
+  border-radius: 2px;
+  padding: 1px 2px;
+}
+
+mark.search-match--current {
+  background: color-mix(in srgb, var(--brand) 32%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand) 40%, transparent);
+}
+
 .outline-scrim {
   position: fixed;
   top: 46px;
@@ -401,54 +507,56 @@ textarea {
   }
 }
 
-/* 热重载提示（二）：页边批注——装订线一侧竖排小字，随文档滚动，仅宽窗口显示 */
-/* TODO: 当前位置依赖固定 top/left，在不同窗口与大纲布局下观感不稳定；后续重做定位方案。 */
+/* 热重载提示（二）：印章——悬浮于窗口中下方，不随文档滚动，所有窗口尺寸可见 */
+/* 定位基准为 .app-shell__body；侧边栏打开时随文章区域中心右移 */
 .reload-note {
   position: absolute;
-  top: 118px;
-  left: calc(50% - 400px + 4px);
-  z-index: 10;
-  writing-mode: vertical-rl;
-  font-size: 12px;
-  letter-spacing: 5px;
-  color: var(--stone);
+  left: 50%;
+  bottom: 22%;
+  transform: translateX(-50%);
+  z-index: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 11px;
+  border: 1.8px solid var(--brand);
+  border-radius: 4px;
+  color: var(--brand);
+  font-size: 11px;
+  letter-spacing: 4px;
+  font-weight: 500;
+  white-space: nowrap;
   pointer-events: none;
-  animation: reload-note-fade 2.8s ease forwards;
+  animation: stamp-press 2.8s ease forwards;
 }
 
-.reload-note::before {
-  content: "";
-  display: block;
-  width: 5px;
-  height: 5px;
-  margin: 0 auto 8px;
-  background: var(--brand);
-  border-radius: 1px;
+/* 侧边栏打开时文章区右移 outline-shift，印章中心随之右移一半以保持居中于文章区。
+   与正文 margin-left 同断点：窄屏（<720px）侧边栏为悬浮遮罩、正文不右移，印章也不偏移 */
+@media (min-width: 720px) {
+  .app-shell__body--outline-open .reload-note {
+    left: calc(50% + var(--outline-shift) / 2);
+  }
 }
 
-@keyframes reload-note-fade {
+@keyframes stamp-press {
   0% {
     opacity: 0;
-    transform: translateY(-6px);
+    transform: translateX(-50%) scale(1.8) rotate(-8deg);
   }
-  12% {
+  15% {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(-50%) scale(0.92) rotate(3deg);
   }
-  82% {
+  25% {
+    transform: translateX(-50%) scale(1) rotate(0deg);
+  }
+  80% {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(-50%) scale(1) rotate(0deg);
   }
   100% {
     opacity: 0;
-    transform: translateY(0);
-  }
-}
-
-/* 仅手机窄屏退场；桌面和平板的正文内侧留白足够容纳批注 */
-@media (max-width: 719px) {
-  .reload-note {
-    display: none;
+    transform: translateX(-50%) scale(1) rotate(0deg);
   }
 }
 
@@ -462,18 +570,6 @@ textarea {
 @media (min-width: 720px) {
   .app-shell__body--outline-open .document-scroll {
     margin-left: var(--outline-shift);
-  }
-}
-
-@media (min-width: 1280px) {
-  .app-shell__body--outline-open .markdown-body,
-  .app-shell__body--outline-open .empty-state,
-  .app-shell__body--outline-open .error-state {
-    max-width: var(--content-max-width-wide);
-  }
-
-  .app-shell__body--outline-open .reload-note {
-    left: calc(50% - 480px + 4px);
   }
 }
 

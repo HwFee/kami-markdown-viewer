@@ -5,7 +5,8 @@ import { OutlineToggle } from "./OutlineToggle";
 function MinimizeIcon() {
   return (
     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <line x1="5" y1="12" x2="19" y2="12" />
+      <line x1="6" y1="15" x2="18" y2="15" />
+      <path d="M9 9h6" opacity="0.35" />
     </svg>
   );
 }
@@ -13,7 +14,8 @@ function MinimizeIcon() {
 function MaximizeIcon() {
   return (
     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="4" y="4" width="16" height="16" />
+      <rect x="5" y="5" width="14" height="14" rx="2" />
+      <path d="M5 9h14" opacity="0.35" />
     </svg>
   );
 }
@@ -21,8 +23,8 @@ function MaximizeIcon() {
 function CloseIcon() {
   return (
     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="5" y1="5" x2="19" y2="19" />
-      <line x1="19" y1="5" x2="5" y2="19" />
+      <line x1="6.5" y1="6.5" x2="17.5" y2="17.5" />
+      <line x1="17.5" y1="6.5" x2="6.5" y2="17.5" />
     </svg>
   );
 }
@@ -31,6 +33,7 @@ function OpenIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+      <path d="M8 14h5" opacity="0.5" />
     </svg>
   );
 }

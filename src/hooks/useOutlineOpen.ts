@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Store } from "@tauri-apps/plugin-store";
+import { getSettingsStore } from "../lib/settings";
 
 const STORE_KEY = "outlineOpen";
-const STORE_PATH = "settings.json";
 
 function logStoreFailure(operation: string, error: unknown) {
   console.warn(`outlineOpen Store ${operation} failed:`, error);
@@ -15,50 +14,9 @@ function logPersistenceFailure(operation: string, error: unknown) {
 export function useOutlineOpen(initialOpen: boolean = false): [boolean, () => void, (open: boolean) => void] {
   const [isOpen, setIsOpen] = useState<boolean>(initialOpen);
   const hasInteracted = useRef(false);
-  // 缓存 Store 实例（以 promise 形式），避免每次读写都重新 Store.load；
-  // 加载失败时不缓存，让下次操作可以重试
-  const storePromiseRef = useRef<Promise<Store> | null>(null);
 
-  function getStore(): Promise<Store> {
-    if (!storePromiseRef.current) {
-      storePromiseRef.current = Store.load(STORE_PATH).catch((error) => {
-        storePromiseRef.current = null;
-        throw error;
-      });
-    }
-    return storePromiseRef.current;
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadState() {
-      try {
-        const store = await getStore();
-        const value = await store.get<boolean>(STORE_KEY);
-        if (!cancelled && value !== undefined && !hasInteracted.current) {
-          setIsOpen(value);
-        }
-      } catch (storeError) {
-        logStoreFailure("load", storeError);
-        try {
-          const localValue = localStorage.getItem(STORE_KEY);
-          if (!cancelled && localValue !== null && !hasInteracted.current) {
-            setIsOpen(localValue === "true");
-          }
-        } catch (localError) {
-          logPersistenceFailure("load", localError);
-        }
-      }
-    }
-
-    void loadState();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
+  // 启动时恒为关闭，不恢复上次的开关状态（产品决定：默认关闭侧边栏）。
+  // 用户交互后的状态仍会持久化写入（复用共享 settings Store），仅启动时不读取。
   useEffect(() => {
     if (!hasInteracted.current) {
       return;
@@ -66,7 +24,7 @@ export function useOutlineOpen(initialOpen: boolean = false): [boolean, () => vo
 
     async function saveState() {
       try {
-        const store = await getStore();
+        const store = await getSettingsStore();
         await store.set(STORE_KEY, isOpen);
         await store.save();
       } catch (storeError) {

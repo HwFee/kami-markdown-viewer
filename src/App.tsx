@@ -1,11 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CustomScrollbar } from "./components/CustomScrollbar";
 import { EmptyState } from "./components/EmptyState";
 import { ErrorState } from "./components/ErrorState";
-import { MarkdownDocument } from "./components/MarkdownDocument";
 import { OutlinePanel } from "./components/OutlinePanel";
 import { TopBar } from "./components/TopBar";
 import { useIsNarrow } from "./hooks/useIsNarrow";
@@ -15,6 +14,10 @@ import { extractOutline } from "./lib/outline";
 import { loadLastOpened, saveLastOpened } from "./lib/lastOpened";
 import { loadScrollPosition, saveScrollPosition } from "./lib/scrollMemory";
 import type { DocumentState, LoadedDocument } from "./types";
+
+// 代码分割：react-markdown + rehype/remark + 语法高亮是体积最大的依赖，
+// 懒加载后首屏（顶栏/空状态）先行渲染，文档引擎在后台加载。
+const MarkdownDocument = lazy(() => import("./components/MarkdownDocument"));
 
 export default function App() {
   const [state, setState] = useState<DocumentState>({ status: "empty" });
@@ -30,8 +33,48 @@ export default function App() {
   const currentPathRef = useRef<string | null>(null);
   const pendingScrollRef = useRef<number | null>(null);
   const scrollSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [isOutlineOpen, toggleOutline, setIsOutlineOpen] = useOutlineOpen(false);
+  const lastRestoredPathRef = useRef<string | null>(null);
+  const [isOutlineOpen, toggleOutline, setIsOutlineOpen] = useOutlineOpen(true);
   const isNarrow = useIsNarrow();
+
+  // ===== 搜索状态 =====
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeMatchIndex, setActiveMatchIndex] = useState(0);
+  const [matchCount, setMatchCount] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const handleSearchChange = useCallback((query: string) => {
+    setSearchQuery(query);
+    setActiveMatchIndex(0);
+  }, []);
+
+  const handleNextMatch = useCallback(() => {
+    setActiveMatchIndex((prev) => (matchCount > 0 ? (prev + 1) % matchCount : 0));
+  }, [matchCount]);
+
+  const handlePrevMatch = useCallback(() => {
+    setActiveMatchIndex((prev) => (matchCount > 0 ? (prev - 1 + matchCount) % matchCount : 0));
+  }, [matchCount]);
+
+  const handleMatchCountChange = useCallback((count: number) => {
+    setMatchCount(count);
+  }, []);
+
+  // ⌘K / Ctrl+K 聚焦搜索框
+  useEffect(() => {
+    function handleSearchShortcut(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key === "k") {
+        event.preventDefault();
+        if (!isOutlineOpen) {
+          setIsOutlineOpen(true);
+        }
+        // 等侧栏展开后再聚焦
+        setTimeout(() => searchInputRef.current?.focus(), 60);
+      }
+    }
+    window.addEventListener("keydown", handleSearchShortcut);
+    return () => window.removeEventListener("keydown", handleSearchShortcut);
+  }, [isOutlineOpen, setIsOutlineOpen]);
 
   /** 把当前滚动位置以比例形式写入持久化存储 */
   function persistCurrentScroll() {
@@ -49,7 +92,11 @@ export default function App() {
     // 连续打开文件时只有最新一次请求允许写回状态，避免慢响应覆盖新文档
     const requestId = ++loadRequestRef.current;
     setShowReloadNote(false);
-    setState({ status: "loading" });
+    // 首次加载（尚无文档展示）跳过中间「加载中...」帧，直接 empty → ready，
+    // 少一次无意义渲染；切换文档时保留 loading 态作为反馈。
+    if (currentPathRef.current !== null) {
+      setState({ status: "loading" });
+    }
     try {
       const document = await invoke<LoadedDocument>("load_document", { path });
       if (loadRequestRef.current !== requestId) return;
@@ -172,26 +219,27 @@ export default function App() {
 
   const activeDocument = state.status === "ready" ? state.document : undefined;
 
-  // 切换文档时恢复上次阅读位置（无记录则回到顶部）
-  useEffect(() => {
+  // 切换文档时恢复上次阅读位置（无记录则回到顶部）。
+  // 恢复时机放在 MarkdownDocument 内容渲染进 DOM 之后（onRendered），而非 state 变 ready 时：
+  // 因为 MarkdownDocument 是懒加载，state ready 时正文 chunk 可能尚未加载、未进 DOM，
+  // 此时 scrollHeight 不可用，会导致恢复位置计算为 0。用 lastRestoredPathRef 记录已恢复的
+  // 路径，仅在切换到新文档时恢复；同文档的热重载/重渲染不处理（由 pendingScrollRef 负责）。
+  const handleContentRendered = useCallback(() => {
     const container = scrollRef.current;
-    if (!container) return;
-    const path = activeDocument?.path;
-    if (!path) return;
-
-    let cancelled = false;
+    const path = currentPathRef.current;
+    if (!container || !path) return;
+    if (lastRestoredPathRef.current === path) return;
+    lastRestoredPathRef.current = path;
     // 先归零，避免沿用上一篇文档的滚动位置
     container.scrollTop = 0;
     void loadScrollPosition(path).then((ratio) => {
-      if (cancelled || ratio === null) return;
+      if (ratio === null) return;
+      // 异步期间可能已切换到别的文档，作废本次恢复
+      if (currentPathRef.current !== path) return;
       const max = container.scrollHeight - container.clientHeight;
       container.scrollTo({ top: Math.round(ratio * max), behavior: "smooth" });
     });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeDocument?.path]);
+  }, []);
 
   // 滚动时防抖记录阅读位置，窗口关闭前再兜底保存一次
   useEffect(() => {
@@ -286,21 +334,28 @@ export default function App() {
         onToggleOutline={toggleOutline}
       />
       <div className={`app-shell__body ${isOutlineOpen ? "app-shell__body--outline-open" : ""}`}>
+        {/* 热重载提示（二）：印章，悬浮于窗口中下方、不随文档滚动；key 变化即重播 */}
+        {showReloadNote && (
+          <div key={reloadTick} className="reload-note" role="status">
+            墨迹未干
+          </div>
+        )}
         <aside className={`outline-sidebar ${isOutlineOpen ? "outline-sidebar--open" : ""}`}>
           <OutlinePanel
             headings={headings}
             activeHeadingId={activeHeadingId}
             onSelectHeading={handleSelectHeading}
+            searchQuery={searchQuery}
+            onSearchChange={handleSearchChange}
+            matchCount={matchCount}
+            activeMatchIndex={activeMatchIndex}
+            onNextMatch={handleNextMatch}
+            onPrevMatch={handlePrevMatch}
+            searchInputRef={searchInputRef}
           />
         </aside>
         <div ref={scrollRef} className="document-scroll" tabIndex={0}>
           <div ref={contentRef} className="document-scroll__content">
-            {/* 热重载提示（二）：页边批注，随文档滚动，仅宽窗口显示；key 变化即重播 */}
-            {showReloadNote && (
-              <div key={reloadTick} className="reload-note" role="status">
-                墨迹未干
-              </div>
-            )}
             <div ref={documentContentRef} className="document-content">
               {state.status === "empty" ? <EmptyState onOpen={handleOpen} /> : null}
               {state.status === "loading" ? (
@@ -310,7 +365,16 @@ export default function App() {
               ) : null}
               {state.status === "error" ? <ErrorState message={state.message} path={state.path} /> : null}
               {state.status === "ready" ? (
-                <MarkdownDocument markdown={state.document.markdown} headings={headings} />
+                <Suspense fallback={null}>
+                  <MarkdownDocument
+                    markdown={state.document.markdown}
+                    headings={headings}
+                    onRendered={handleContentRendered}
+                    searchQuery={searchQuery}
+                    activeMatchIndex={activeMatchIndex}
+                    onMatchCountChange={handleMatchCountChange}
+                  />
+                </Suspense>
               ) : null}
             </div>
           </div>
