@@ -4211,7 +4211,7 @@ dependencies = [
 
 [[package]]
 name = "vellum"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "base64 0.22.1",
  "dunce",
