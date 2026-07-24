@@ -36,3 +36,6 @@ coverage/
 
 # Windows reserved-name artifacts that break Git on Windows
 nul
+
+# Project-local agent skills are junctions to the shared skill repo
+.agents/

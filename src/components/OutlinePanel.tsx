@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { buildOutlineTree, type OutlineNode } from "../lib/outline";
 import type { OutlineHeading } from "../types";
 
@@ -37,7 +37,7 @@ function SearchIcon() {
 
 function ChevronUpIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="18 15 12 9 6 15" />
     </svg>
   );
@@ -45,7 +45,7 @@ function ChevronUpIcon() {
 
 function ChevronDownIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="6 9 12 15 18 9" />
     </svg>
   );
@@ -106,6 +106,8 @@ export function OutlinePanel({
 }: OutlinePanelProps) {
   const navRef = useRef<HTMLElement>(null);
   const isSearching = searchQuery.length > 0;
+  // 大纲树只在 headings 变化时重建，搜索输入等高频渲染不再重复计算
+  const outlineTree = useMemo(() => buildOutlineTree(headings), [headings]);
 
   // 搜索激活时跳过自动滚动：搜索已通过文档内的 scrollIntoView 滚动正文，
   // 若大纲面板再跟随滚动会形成连锁反应（正文↔侧边栏互相触发），导致抖动甚至白屏。
@@ -169,7 +171,7 @@ export function OutlinePanel({
         <p className="outline-panel__empty">本文档暂无目录</p>
       ) : (
         <OutlineItems
-          nodes={buildOutlineTree(headings)}
+          nodes={outlineTree}
           activeHeadingId={activeHeadingId}
           onSelectHeading={onSelectHeading}
         />

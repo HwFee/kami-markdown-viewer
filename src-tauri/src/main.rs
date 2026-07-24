@@ -293,6 +293,17 @@ fn main() {
             resolve_asset,
             drain_pending_open_paths
         ])
+        .setup(|app| {
+            // 兜底：3 秒后强制显示窗口，防止前端 JS 加载失败导致窗口永久隐藏。
+            let window = app
+                .get_webview_window("main")
+                .expect("main window not found");
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(3));
+                let _ = window.show();
+            });
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("failed to run 素笺");
 }

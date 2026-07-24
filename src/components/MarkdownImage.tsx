@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 
 type MarkdownImageProps = {
   src?: string;
@@ -11,7 +11,9 @@ function isRemote(src: string) {
   return src.startsWith("http://") || src.startsWith("https://") || src.startsWith("data:");
 }
 
-export function MarkdownImage({ src, alt = "", title }: MarkdownImageProps) {
+// memo：props 均为字符串，父级因搜索等状态重渲染时图片组件整体跳过，
+// 避免重复触发 resolve_asset IPC
+export const MarkdownImage = memo(function MarkdownImage({ src, alt = "", title }: MarkdownImageProps) {
   const [resolvedSrc, setResolvedSrc] = useState(() => (src && isRemote(src) ? src : ""));
   const [error, setError] = useState<string | null>(null);
 
@@ -61,4 +63,4 @@ export function MarkdownImage({ src, alt = "", title }: MarkdownImageProps) {
   }
 
   return <img src={resolvedSrc} alt={alt} title={title} loading="lazy" />;
-}
+});

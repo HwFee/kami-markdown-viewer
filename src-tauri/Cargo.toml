@@ -1,6 +1,6 @@
 [package]
 name = "vellum"
-version = "1.1.0"
+version = "1.2.0"
 description = "Vellum · 素笺 - an elegant Markdown viewer for Windows"
 authors = ["Vellum · 素笺"]
 edition = "2021"
@@ -32,5 +32,7 @@ windows-sys = { version = "0.61", features = [
 ] }
 
 [profile.release]
+# 发布配置：运行性能/体积优先，编译时间较长。
+# 日常快速迭代打包可临时改为：lto = "thin"、codegen-units = 16、incremental = true
 lto = true
 codegen-units = 1

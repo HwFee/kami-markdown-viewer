@@ -4,6 +4,28 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.2.0] - 2026-07-24
+
+### 新增
+
+- 文档内搜索：大纲面板搜索框（⌘K / Ctrl+K 聚焦），Enter / Shift+Enter 在匹配项间跳转，当前匹配高亮并平滑滚动定位，实时显示「第 n/共 N 项」
+
+### 性能
+
+- 代码高亮改用 `PrismLight` 按需注册 20 种语言，打包产物由 303 个文件（~2.5MB）降至 6 个（672KB）
+- `manualChunks` 拆分 React 核心与语法高亮为独立 chunk，正文引擎 `React.lazy` 懒加载
+- 启动时窗口在首篇文档渲染提交后才显示，消除空状态闪现；字体改为后台加载不阻塞渲染
+- 搜索体验：搜索词经 `useDeferredValue` 传入文档层，输入不再被大文档重解析阻塞；切换上一个/下一个匹配改为 DOM 打标，不再整篇重解析
+- 文档不含原始 HTML 时自动跳过 `rehype-raw` 的二次解析
+- `components` prop、大纲树、代码块/图片组件全面 memo 化，消除无关重渲染
+- 打包只产出 NSIS 单安装包；release 构建保持 `lto = true` + `codegen-units = 1` 最大优化
+
+## [1.1.0] - 2026-07-22
+
+### 修复
+
+- 启动时 reg.exe 控制台窗口闪现（`CREATE_NO_WINDOW`）
+
 ## [1.0.0] - 2026-07-21
 
 ### 重命名

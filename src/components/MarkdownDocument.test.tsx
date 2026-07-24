@@ -168,7 +168,7 @@ describe("MarkdownDocument", () => {
   it("renders inline code without a copy button", () => {
     render(<MarkdownDocument markdown="Use `inlineCode` here." />);
     expect(screen.getByRole("code")).toHaveTextContent("inlineCode");
-    expect(screen.queryByRole("button", { name: "复制代码" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "复制" })).not.toBeInTheDocument();
   });
 
   it("renders a copyable code block for fenced code with language", async () => {
@@ -178,7 +178,7 @@ const x = 1;
 ```" />);
     expect(screen.getByText("ts")).toBeInTheDocument();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
+      fireEvent.click(screen.getByRole("button", { name: "复制" }));
     });
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("const x = 1;");
     vi.unstubAllGlobals();
@@ -189,10 +189,10 @@ const x = 1;
     render(<MarkdownDocument markdown="```
 plain block
 ```" />);
-    expect(screen.getByRole("button", { name: "复制代码" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制" })).toBeInTheDocument();
     expect(screen.queryByText("plain")).not.toBeInTheDocument();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
+      fireEvent.click(screen.getByRole("button", { name: "复制" }));
     });
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("plain block");
     vi.unstubAllGlobals();
@@ -201,9 +201,9 @@ plain block
   it("renders copy controls for sanitized raw HTML pre > code", async () => {
     vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn().mockResolvedValueOnce(undefined) } });
     render(<MarkdownDocument markdown="<pre><code>raw html</code></pre>" />);
-    expect(screen.getByRole("button", { name: "复制代码" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制" })).toBeInTheDocument();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
+      fireEvent.click(screen.getByRole("button", { name: "复制" }));
     });
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("raw html");
     vi.unstubAllGlobals();
@@ -215,7 +215,7 @@ plain block
 
     expect(screen.getByRole("code")).toHaveTextContent("raw html");
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
+      fireEvent.click(screen.getByRole("button", { name: "复制" }));
     });
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("raw html");
     vi.unstubAllGlobals();

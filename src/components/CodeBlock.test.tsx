@@ -27,13 +27,13 @@ describe("CodeBlock", () => {
   it("renders the code with a copy button and optional language label", () => {
     render(<CodeBlock code="const x = 1;" language="ts" />);
     expect(screen.getByRole("code")).toHaveTextContent("const x = 1;");
-    expect(screen.getByRole("button", { name: "复制代码" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制" })).toBeInTheDocument();
     expect(screen.getByText("ts")).toBeInTheDocument();
   });
 
   it("renders without a language label when language is empty", () => {
     render(<CodeBlock code="plain text" />);
-    expect(screen.getByRole("button", { name: "复制代码" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制" })).toBeInTheDocument();
     expect(screen.queryByText("plain")).not.toBeInTheDocument();
   });
 
@@ -53,7 +53,7 @@ describe("CodeBlock", () => {
     render(<CodeBlock code={`  indented
   code`} language="ts" />);
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
+      fireEvent.click(screen.getByRole("button", { name: "复制" }));
     });
     expect(writeText).toHaveBeenCalledWith(`  indented
   code`);
@@ -63,7 +63,7 @@ describe("CodeBlock", () => {
     vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn().mockResolvedValueOnce(undefined) } });
     render(<CodeBlock code="x" />);
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
+      fireEvent.click(screen.getByRole("button", { name: "复制" }));
     });
     expect(screen.getByRole("status")).toHaveTextContent("已复制");
     await act(async () => {
@@ -76,7 +76,7 @@ describe("CodeBlock", () => {
     vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn().mockRejectedValueOnce(new Error("denied")) } });
     render(<CodeBlock code="x" />);
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
+      fireEvent.click(screen.getByRole("button", { name: "复制" }));
     });
     expect(screen.getByRole("status")).toHaveTextContent("复制失败");
     await act(async () => {
@@ -102,7 +102,7 @@ describe("CodeBlock", () => {
 
     const { unmount } = render(<CodeBlock code="x" />);
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "复制代码" }));
+      fireEvent.click(screen.getByRole("button", { name: "复制" }));
     });
 
     unmount();
@@ -122,7 +122,7 @@ describe("CodeBlock", () => {
     vi.stubGlobal("navigator", { clipboard: { writeText } });
 
     render(<CodeBlock code="x" />);
-    const button = screen.getByRole("button", { name: "复制代码" });
+    const button = screen.getByRole("button", { name: "复制" });
 
     await act(async () => {
       fireEvent.click(button);

@@ -1,6 +1,50 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { PrismAsyncLight as SyntaxHighlighter } from "react-syntax-highlighter";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
+
+// 按需注册常用语言，避免 Vite 为所有 270+ 语言生成独立 chunk。
+// 未注册的语言降级为纯文本展示。
+import bash from "react-syntax-highlighter/dist/esm/languages/prism/bash";
+import c from "react-syntax-highlighter/dist/esm/languages/prism/c";
+import cpp from "react-syntax-highlighter/dist/esm/languages/prism/cpp";
+import csharp from "react-syntax-highlighter/dist/esm/languages/prism/csharp";
+import css from "react-syntax-highlighter/dist/esm/languages/prism/css";
+import diff from "react-syntax-highlighter/dist/esm/languages/prism/diff";
+import go from "react-syntax-highlighter/dist/esm/languages/prism/go";
+import java from "react-syntax-highlighter/dist/esm/languages/prism/java";
+import javascript from "react-syntax-highlighter/dist/esm/languages/prism/javascript";
+import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
+import kotlin from "react-syntax-highlighter/dist/esm/languages/prism/kotlin";
+import markup from "react-syntax-highlighter/dist/esm/languages/prism/markup";
+import markdown from "react-syntax-highlighter/dist/esm/languages/prism/markdown";
+import python from "react-syntax-highlighter/dist/esm/languages/prism/python";
+import ruby from "react-syntax-highlighter/dist/esm/languages/prism/ruby";
+import rust from "react-syntax-highlighter/dist/esm/languages/prism/rust";
+import sql from "react-syntax-highlighter/dist/esm/languages/prism/sql";
+import toml from "react-syntax-highlighter/dist/esm/languages/prism/toml";
+import typescript from "react-syntax-highlighter/dist/esm/languages/prism/typescript";
+import yaml from "react-syntax-highlighter/dist/esm/languages/prism/yaml";
+
+SyntaxHighlighter.registerLanguage("bash", bash);
+SyntaxHighlighter.registerLanguage("c", c);
+SyntaxHighlighter.registerLanguage("cpp", cpp);
+SyntaxHighlighter.registerLanguage("csharp", csharp);
+SyntaxHighlighter.registerLanguage("css", css);
+SyntaxHighlighter.registerLanguage("diff", diff);
+SyntaxHighlighter.registerLanguage("go", go);
+SyntaxHighlighter.registerLanguage("java", java);
+SyntaxHighlighter.registerLanguage("javascript", javascript);
+SyntaxHighlighter.registerLanguage("json", json);
+SyntaxHighlighter.registerLanguage("kotlin", kotlin);
+SyntaxHighlighter.registerLanguage("markup", markup);
+SyntaxHighlighter.registerLanguage("markdown", markdown);
+SyntaxHighlighter.registerLanguage("python", python);
+SyntaxHighlighter.registerLanguage("ruby", ruby);
+SyntaxHighlighter.registerLanguage("rust", rust);
+SyntaxHighlighter.registerLanguage("sql", sql);
+SyntaxHighlighter.registerLanguage("toml", toml);
+SyntaxHighlighter.registerLanguage("typescript", typescript);
+SyntaxHighlighter.registerLanguage("yaml", yaml);
 
 type CodeBlockProps = {
   code: string;
@@ -35,7 +79,19 @@ function resolveHighlightLanguage(language?: string): string {
   return LANGUAGE_ALIASES[language] ?? language;
 }
 
-export function CodeBlock({ code, language }: CodeBlockProps) {
+// 高亮器的 customStyle 是静态对象，提升为模块常量避免每次渲染创建新引用
+const HIGHLIGHTER_CUSTOM_STYLE = {
+  margin: 0,
+  padding: "14px 19px",
+  borderRadius: "6px",
+  background: "transparent",
+  fontSize: "inherit",
+  lineHeight: "inherit",
+} as const;
+
+// memo：props 只有 code/language 两个字符串。搜索高亮等父级重渲染时，
+// 所有代码块跳过重新渲染，避免重复执行昂贵的 Prism 语法高亮。
+export const CodeBlock = memo(function CodeBlock({ code, language }: CodeBlockProps) {
   const [status, setStatus] = useState<CopyStatus>("idle");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestRef = useRef(0);
@@ -76,17 +132,17 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
 
   const isCopied = status === "copied";
   const isError = status === "error";
-  const visibleLabel = isCopied ? "已复制" : isError ? "复制失败" : "复制代码";
+  const visibleLabel = isCopied ? "已复制" : isError ? "复制失败" : "复制";
 
   return (
     <div className="code-block">
       <div className="code-block__header">
-        {language ? <span className="code-block__lang">{language}</span> : null}
+        <span className="code-block__lang">{language || "text"}</span>
         <button
           type="button"
           className="code-block__copy"
-          aria-label="复制代码"
-          title="复制代码"
+          aria-label="复制"
+          title="复制"
           onClick={handleCopy}
         >
           <span className="code-block__copy-icon" aria-hidden="true">
@@ -118,14 +174,7 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
           language={resolveHighlightLanguage(language)}
           style={oneLight}
           PreTag="pre"
-          customStyle={{
-            margin: 0,
-            padding: "14px 19px",
-            borderRadius: "6px",
-            background: "transparent",
-            fontSize: "inherit",
-            lineHeight: "inherit",
-          }}
+          customStyle={HIGHLIGHTER_CUSTOM_STYLE}
         >
           {code}
         </SyntaxHighlighter>
@@ -135,4 +184,4 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
       </span>
     </div>
   );
-}
+});

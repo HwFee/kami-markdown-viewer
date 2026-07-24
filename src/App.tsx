@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { Suspense, lazy, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { CustomScrollbar } from "./components/CustomScrollbar";
 import { EmptyState } from "./components/EmptyState";
 import { ErrorState } from "./components/ErrorState";
@@ -42,6 +43,10 @@ export default function App() {
   const [activeMatchIndex, setActiveMatchIndex] = useState(0);
   const [matchCount, setMatchCount] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // 搜索词延迟传给文档渲染层：输入框即时响应，大文档的高亮重解析
+  // 以低优先级在后台进行（MarkdownDocument 已 memo， deferred 值不变时整体跳过渲染）
+  const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const handleSearchChange = useCallback((query: string) => {
     setSearchQuery(query);
@@ -146,6 +151,17 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
+    let shown = false;
+
+    async function revealWindow() {
+      if (shown || cancelled) return;
+      shown = true;
+      try {
+        await getCurrentWindow().show();
+      } catch {
+        // 非关键路径：窗口可能已经可见
+      }
+    }
 
     function drainPendingPaths() {
       drainChainRef.current = drainChainRef.current.catch(() => {}).then(async () => {
@@ -179,12 +195,22 @@ export default function App() {
           await loadPath(lastPath);
         }
       }
+      // 等待 React 将 loadPath 的状态更新提交到 DOM，避免窗口先显示空状态再闪现文档
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+      await revealWindow();
     }
 
-    void bindStartup().catch((error) => {
+    void bindStartup().catch(async (error) => {
       if (!cancelled) {
         setState({ status: "error", message: String(error) });
       }
+      // 同样等待 React 提交错误状态到 DOM 再显示窗口
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+      await revealWindow();
     });
 
     return () => {
@@ -370,7 +396,7 @@ export default function App() {
                     markdown={state.document.markdown}
                     headings={headings}
                     onRendered={handleContentRendered}
-                    searchQuery={searchQuery}
+                    searchQuery={deferredSearchQuery}
                     activeMatchIndex={activeMatchIndex}
                     onMatchCountChange={handleMatchCountChange}
                   />
